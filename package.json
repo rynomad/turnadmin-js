@@ -1,0 +1,23 @@
+{
+  "name": "turnadmin",
+  "version": "0.0.0",
+  "description": "node wrapper to call turnadmin (linux only)",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rynomad/turnadmin-js.git"
+  },
+  "author": "Ryan Bennett",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/rynomad/turnadmin-js/issues"
+  },
+  "homepage": "https://github.com/rynomad/turnadmin-js#readme",
+  "dependencies": {
+    "fs-jetpack": "^2.1.0",
+    "tail-stream": "^0.3.4"
+  }
+}
