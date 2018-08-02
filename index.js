@@ -53,7 +53,7 @@ class TurnAdmin extends EventEmitter{
 
     this.tail.on('data', (data) => {
       console.log('LOGFILE',data.toString())
-      const event = parseEvent(buffer.toString().trim())
+      const event = parseEvent(data.toString().trim())
 
       switch (event.type){
         case 'client':
@@ -70,7 +70,7 @@ class TurnAdmin extends EventEmitter{
           console.debug('DISCONNECT EVENT', event)
           break
         default:
-        console.info("dropping non-event")
+        console.info("dropping non-event", event)
       }
     })
 
