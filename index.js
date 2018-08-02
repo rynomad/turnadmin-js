@@ -2,7 +2,7 @@ const {execSync, spawn} = require('child_process')
 const {EventEmitter} = require('events')    
 const logs = require('fs-jetpack').cwd('/var/log/')
 const ts = require('tail-stream')
-const parseEvent = require('./events.js')
+const {parseLogEvent, consumeLogEvent} = require('./events.js')
 
 
 function debracket(string){
@@ -48,9 +48,16 @@ class TurnAdmin extends EventEmitter{
 
     this.tail.on('data', (data) => {
       const raw = data.toString().trim()
-      const event = parseEvent(raw)
+      const event = parseLogEvent(raw)
       if (event) {
-        this.emit('turnserver', {raw, ...event})
+        this.emit('log', {raw, ...event})
+      }
+    })
+
+    this.tail.on('turnserver', (event) => {
+      event = consumeLogEvent(this, event)
+      if (event){
+        this.emit('client', event)
       }
     })
   }

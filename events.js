@@ -11,9 +11,9 @@ function getMatch(string, regex){
   return match
 }
 
-const events = {
+const _parseLogEvent = {
   client(string){
-    const event_match = getMatch(string, /New UDP endpoint.*remote addr.*/)
+    const event_match = getMatch(string, /New UDP endpoint.*remote addr.*401/)
     if (!event_match) return null
     
     const [realm] = debracket(string)
@@ -87,4 +87,63 @@ const events = {
   }
 }
 
-module.exports = (string) => Object.keys(events).reduce((evt, type) => evt || events[type](string), null)
+const parseLogEvent = (string) => Object.keys(_parseLogEvent).reduce((evt, type) => evt || events[type](string), null)
+
+const _consumeLogEvent = {
+  pending_clients : new Map(),
+  client(_, {ip, realm}){
+    _consumeLogEvent.pending_clients.set(realm, ip)
+  },
+  allocate(admin, {user, realm}){
+    const ip = _consumeLogEvent.pending_clients.get(realm)
+    if (!ip) return null
+    _consumeLogEvent.delete(realm)
+
+    const connection = {user, realm, ip}
+    admin.connections.push(connection)
+    
+    return {
+      type : 'connect',
+      data : {
+        connection
+      }
+    }
+  },
+  usage(admin, {user, realm, ...usage}){
+    const connection = admin.connections.filter(({user : _user, realm : _realm}) => (user === _user) && (realm === _realm))[0]
+    if (!connection) return null
+
+    return {
+      type : 'usage',
+      data : {
+        connection,
+        usage
+      }
+    }
+  },
+  disconnect({user, realm, ip, reason}){
+    const connection = admin.connections.filter(({user : _user, realm : _realm, ip : _ip}) => (user === _user) && (realm === _realm) && (ip === _ip))[0]
+    if (!connection) return null
+
+    return {
+      type : 'disconnect',
+      data : {
+        connection,
+        reason
+      }
+    }
+  }
+}
+
+const consumeLogEvent = (admin, {type, data}) => {
+  if (!_consumeLogEvent[type]){
+    throw new Error(`unknown log event '${type}': ${data}`)
+  }
+
+  return _consumeLogEvent[type](admin, data)
+}
+
+module.exports = {
+  parseLogEvent,
+  consumeLogEvent
+}
