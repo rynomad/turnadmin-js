@@ -22,7 +22,7 @@ const _parseLogEvent = {
       type : 'client',
       data : {
         realm,
-        ip : event_match.split(' ').pop().split(':')[0]
+        ip : event_match.match(/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/)[0]
       }
     }
   },
