@@ -30,7 +30,7 @@ const events = {
     const event_match = getMatch(string, /Local relay addr.*\n.*\n.*ALLOCATE processed, success/)
     if (!event_match) return null
 
-    const [realm, user] = debracket(event_match[0])
+    const [realm, user] = debracket(event_match)
   
     return {
       type : 'allocate',
@@ -44,7 +44,7 @@ const events = {
     const event_match = getMatch(string, /usage: realm.* username=.* sb=.*/)
     if (!event_match) return null
 
-    const [realm, user] = debracket(event_match[0])
+    const [realm, user] = debracket(event_match)
   
     const rp = Number.parseInt(event_match.match(/rp=[0-9]*/)[0].split('=')[1])
     const rb = Number.parseInt(event_match.match(/rb=[0-9]*/)[0].split('=')[1])
@@ -64,7 +64,7 @@ const events = {
     const event_match = string.match(/closed.*user.*realm.*origin.*local.*remote.*/)
     if (!event_match) return null
 
-    const [user, realm, origin] = debracket(event_match[0])  
+    const [user, realm, origin] = debracket(event_match)  
   
     let ip = event_match.match(/remote \S*:/)[0]
     ip = ip.split(' ').pop()
