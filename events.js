@@ -13,7 +13,7 @@ function getMatch(string, regex){
 
 const _parseLogEvent = {
   client(string){
-    const event_match = getMatch(string, /New UDP endpoint.*remote addr.*401/)
+    const event_match = getMatch(string, /New UDP endpoint.*remote addr.*\n.*401/)
     if (!event_match) return null
     
     const [realm] = debracket(string)
