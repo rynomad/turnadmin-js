@@ -97,7 +97,7 @@ const _consumeLogEvent = {
   allocate(admin, {user, realm}){
     const ip = _consumeLogEvent.pending_clients.get(realm)
     if (!ip) return null
-    _consumeLogEvent.delete(realm)
+    _consumeLogEvent.pending_clients.delete(realm)
 
     const connection = {user, realm, ip}
     admin.connections.push(connection)
