@@ -52,30 +52,8 @@ class TurnAdmin extends EventEmitter{
     })
 
     this.tail.on('data', (data) => {
-      console.log('LOGFILE',data.toString())
       const event = parseEvent(data.toString().trim())
-
-      switch (event.type){
-        case 'client':
-          console.debug('CLIENT EVENT', event)
-          this.new_clients.push(event.client)
-        break
-        case 'allocate':
-          console.debug('ALLOCATE EVENT', event)
-        break
-        case 'usage':
-          console.debug('USAGE EVENT', event)
-        break
-        case 'disconnect':
-          console.debug('DISCONNECT EVENT', event)
-          break
-        default:
-        console.info("dropping non-event", event)
-      }
-    })
-
-    this.on('_log_line    ', (line) => {
-
+      if (event.type) this.emit(event.type, event.data)
     })
   }
 
