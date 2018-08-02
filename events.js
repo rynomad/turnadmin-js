@@ -61,7 +61,7 @@ const events = {
     }
   },
   disconnect(string){
-    const event_match = string.match(/closed.*user.*realm.*origin.*local.*remote.*/)
+    const event_match = getMatch(string,/closed.*user.*realm.*origin.*local.*remote.*/)
     if (!event_match) return null
 
     const [user, realm, origin] = debracket(event_match)  

@@ -25,10 +25,6 @@ class TurnAdmin extends EventEmitter{
     }
   }
 
-  static startTurn(){
-    spawn('turnserver', ['-v'])
-  }
-
   static getLogFile(){
     return logs.path(logs.find({matching : `turn_${this.getPID()}*.log`}).pop())
   }
@@ -38,9 +34,8 @@ class TurnAdmin extends EventEmitter{
 
     this.new_clients = []
 
-    while(!(this.pid = TurnAdmin.getPID())){
-      console.warn("turnserver not running, attempting to start")
-      TurnAdmin.startTurn()
+    if (!(this.pid = TurnAdmin.getPID())){
+      throw new Error('Turn server not found')
     }
 
     const logfile = TurnAdmin.getLogFile()
@@ -55,6 +50,30 @@ class TurnAdmin extends EventEmitter{
       const event = parseEvent(data.toString().trim())
       if (event.type) this.emit(event.type, event.data)
     })
+  }
+
+  async exec(argstr){
+    return new Promise((resolve, reject) => {
+      exec(`turnadmin ${argstr}`, (err, stdout, stderr) => {
+        if (err){
+          return reject(err)
+        } else {
+          resolve({stdout, stderr})
+        }
+      })
+    })
+  }
+
+  async addUser({user, password, realm}){
+    return this.exec(`-a -u ${user} -p ${password} -r ${realm}`)
+  }
+
+  async listUsers(){
+    return this.exec(`-l`)
+  }
+
+  async deleteUser({user, realm}){
+    return this.exec(`-d -u ${user} -r ${realm}`)
   }
 
 }
