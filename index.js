@@ -55,9 +55,12 @@ class TurnAdmin extends EventEmitter{
     })
 
     this.tail.on('log', (event) => {
-      event = consumeLogEvent(this, event.data)
+      console.log("CONSUME LOG EVENT", event)
+      event = consumeLogEvent(this, event)
       if (event){
         this.emit('client', event)
+      } else {
+        console.debug("IGNORE")
       }
     })
   }
