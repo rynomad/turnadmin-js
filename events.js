@@ -87,7 +87,7 @@ const _parseLogEvent = {
   }
 }
 
-const parseLogEvent = (string) => Object.keys(_parseLogEvent).reduce((evt, type) => evt || events[type](string), null)
+const parseLogEvent = (string) => Object.keys(_parseLogEvent).reduce((evt, type) => evt || _parseLogEvent[type](string), null)
 
 const _consumeLogEvent = {
   pending_clients : new Map(),
