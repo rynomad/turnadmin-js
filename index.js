@@ -1,4 +1,4 @@
-const {execSync, spawn} = require('child_process')
+const {execSync, exec} = require('child_process')
 const {EventEmitter} = require('events')    
 const logs = require('fs-jetpack').cwd('/var/log/')
 const ts = require('tail-stream')
@@ -69,7 +69,7 @@ class TurnAdmin extends EventEmitter{
     return new Promise((resolve, reject) => {
       exec(`turnadmin ${argstr}`, (err, stdout, stderr) => {
         if (err){
-          return reject(err)
+          reject(err)
         } else {
           resolve({stdout, stderr})
         }
@@ -78,15 +78,21 @@ class TurnAdmin extends EventEmitter{
   }
 
   async addUser({user, password, realm}){
-    return this.exec(`-a -u ${user} -p ${password} -r ${realm}`)
+    const {stdout, stderr} = await this.exec(`-a -u ${user} -p ${password} -r ${realm}`)
+    console.log('out',stdout)
+    console.error('err',stderr)
   }
 
   async listUsers(){
-    return this.exec(`-l`)
+    const {stdout, stderr} = await this.exec(`-l`)
+    console.log('out',stdout)
+    console.error('err',stderr)
   }
 
   async deleteUser({user, realm}){
-    return this.exec(`-d -u ${user} -r ${realm}`)
+    const {stdout, stderr} = await this.exec(`-d -u ${user} -r ${realm}`)
+    console.log('out',stdout)
+    console.error('err',stderr)
   }
 
 }
