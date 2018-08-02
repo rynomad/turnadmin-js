@@ -47,8 +47,11 @@ class TurnAdmin extends EventEmitter{
     })
 
     this.tail.on('data', (data) => {
-      const event = parseEvent(data.toString().trim())
-      if (event.type) this.emit(event.type, event.data)
+      const raw = data.toString().trim()
+      const event = parseEvent(raw)
+      if (event) {
+        this.emit('turnserver', {raw, ...event})
+      }
     })
   }
 

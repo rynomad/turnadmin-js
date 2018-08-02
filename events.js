@@ -87,4 +87,4 @@ const events = {
   }
 }
 
-module.exports = (string) => Object.keys(events).reduce((evt, type) => evt || events[type](string), null) || {}
+module.exports = (string) => Object.keys(events).reduce((evt, type) => evt || events[type](string), null)
