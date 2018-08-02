@@ -32,7 +32,7 @@ class TurnAdmin extends EventEmitter{
   constructor(){
     super()
 
-    this.connections = []
+    this.connections = new Map()
 
     if (!(this.pid = TurnAdmin.getPID())){
       throw new Error('Turn server not found')

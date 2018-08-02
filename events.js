@@ -100,7 +100,7 @@ const _consumeLogEvent = {
     _consumeLogEvent.pending_clients.delete(realm)
 
     const connection = {user, realm, ip}
-    admin.connections.push(connection)
+    admin.connections.set(`${user}:${realm}`, connection)
     
     return {
       type : 'connect',
@@ -110,7 +110,7 @@ const _consumeLogEvent = {
     }
   },
   usage(admin, {user, realm, ...usage}){
-    const connection = admin.connections.filter(({user : _user, realm : _realm}) => (user === _user) && (realm === _realm))[0]
+    const connection = admin.connections.get(`${user}:${realm}`)
     if (!connection) return null
 
     return {
@@ -122,8 +122,9 @@ const _consumeLogEvent = {
     }
   },
   disconnect(admin, {user, realm, ip, reason}){
-    const connection = admin.connections.filter(({user : _user, realm : _realm, ip : _ip}) => (user === _user) && (realm === _realm) && (ip === _ip))[0]
+    const connection = admin.connections.get(`${user}:${realm}`)
     if (!connection) return null
+    admin.connections.delete(`${user}:${realm}`)
 
     return {
       type : 'disconnect',
