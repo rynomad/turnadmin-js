@@ -121,7 +121,7 @@ const _consumeLogEvent = {
       }
     }
   },
-  disconnect({user, realm, ip, reason}){
+  disconnect(admin, {user, realm, ip, reason}){
     const connection = admin.connections.filter(({user : _user, realm : _realm, ip : _ip}) => (user === _user) && (realm === _realm) && (ip === _ip))[0]
     if (!connection) return null
 
