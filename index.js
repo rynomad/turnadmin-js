@@ -85,6 +85,7 @@ class TurnAdmin extends EventEmitter{
       console.log('clearing remaining boots')
       for (let [_, cmd] of this.boots){
         execSync(cmd)
+        console.log(cmd)
       }
     })
   }
