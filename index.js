@@ -34,6 +34,8 @@ class TurnAdmin extends EventEmitter{
 
     this.connections = new Map()
 
+    this.boots = new Map()
+
     if (!(this.pid = TurnAdmin.getPID())){
       throw new Error('Turn server not found')
     }
@@ -61,6 +63,28 @@ class TurnAdmin extends EventEmitter{
         this.emit('client', event)
       } else {
         console.debug("IGNORE")
+      }
+    })
+
+    setInterval(() => {
+      for (let [time, cmd] of this.boots){
+        if (time < Date.now()){
+          console.log("clearing boot", cmd)
+          exec(cmd, (err, stdout, stderr) => {
+            if (err) {
+              console.log("error clearing boot", cmd)
+              console.log(err)
+            }
+            this.boots.delete(time)
+          })
+        }
+      }
+    },10000)
+
+    process.on('exit', () => {
+      console.log('clearing remaining boots')
+      for (let [_, cmd] of this.boots){
+        execSync(cmd)
       }
     })
   }
@@ -102,10 +126,8 @@ class TurnAdmin extends EventEmitter{
       exec(`iptables -A INPUT -p udp -s ${ip} -j DROP`, (err, stdout, stderr) => {
         if (err) return reject(err)
         console.log('set iptables tule')
-        setTimeout(() => {
-          console.log('clearing iptables rule')
-          exec(`iptables -D INPUT -p udp -s ${ip} -j DROP`)
-        }, 5000)
+        this.boots.set(Date.now() + 120000, `iptables -D INPUT -p udp -s ${ip} -j DROP`)
+        resolve()
       })
     })
   }
