@@ -85,8 +85,10 @@ class TurnAdmin extends EventEmitter{
 
   async listUsers(){
     const {stdout, stderr} = await this.exec(`-l`)
-    console.log('out',stdout)
-    console.error('err',stderr)
+    return stdout.trim().split('\n').map(str => {
+      const [user, realm] = str.substr(0, str.length - 1).split('[')
+      return {user, realm}
+    })
   }
 
   async deleteUser({user, realm}){
