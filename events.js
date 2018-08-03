@@ -91,6 +91,7 @@ const parseLogEvent = (string) => Object.keys(_parseLogEvent).reduce((evt, type)
 
 const _consumeLogEvent = {
   pending_clients : new Map(),
+  dead_clients : new Map(),
   client(_, {ip, realm}){
     _consumeLogEvent.pending_clients.set(realm, ip)
   },
@@ -110,8 +111,12 @@ const _consumeLogEvent = {
     }
   },
   usage(admin, {user, realm, ...usage}){
-    const connection = admin.connections.get(`${user}:${realm}`)
-    if (!connection) return null
+    const connection = admin.connections.get(`${user}:${realm}`) || this.dead_clients.get(`${user}:${realm}`)
+    if (!admin.connections.has(`${user}:${realm}`)) {
+      console.log("reviving dead connection")
+      this.dead_clients.delete(`${user}:${realm}`)
+      admin.connections.set(`${user}:${realm}`,connection)
+    }
 
     return {
       type : 'usage',
@@ -125,6 +130,7 @@ const _consumeLogEvent = {
     const connection = admin.connections.get(`${user}:${realm}`)
     if (!connection) return null
     admin.connections.delete(`${user}:${realm}`)
+    this.dead_clients.set(`${user}:${realm}`, connection)
 
     return {
       type : 'disconnect',
