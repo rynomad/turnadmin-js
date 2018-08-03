@@ -5,6 +5,7 @@ const fs = require('fs')
 
 class TokenReceiver extends EventEmitter{
   constructor({username, credentials, certpath, keypath}){
+    super()
     this.username = username
     this.credentials = credentials
 
@@ -13,10 +14,10 @@ class TokenReceiver extends EventEmitter{
         cert : fs.readFileSync(certpath),
         key : fs.readFileSync(keypath)
       },(request, response) => {
-        const {query : {access_token, expires_in, username}} = url.parse(request.url, true)
+        const {query} = url.parse(request.url, true)
+        const {access_token, expires_in, username} = query
         if (access_token && expires_in && username) {
-          console.log("GOT CREDENTIALS")
-          console.log(access_token, expires_in, username)
+          console.log("GOT CREDENTIALS", query)
           if (username !== this.username){
             console.warn('got wrong username, dropping')
             response.statusCode = 500
