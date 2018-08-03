@@ -97,6 +97,19 @@ class TurnAdmin extends EventEmitter{
     console.error('err',stderr)
   }
 
+  async bootConnection({ip}, callback){
+    return new Promise((resolve, reject) => {
+      exec(`iptables -A INPUT -p udp -s ${ip} -j DROP`, (err, stdout, stderr) => {
+        if (err) return reject(err)
+        console.log('set iptables tule')
+        setTimeout(() => {
+          console.log('clearing iptables rule')
+          exec(`iptables -D INPUT -p udp -s ${ip} -j DROP`)
+        }, 5000)
+      })
+    })
+  }
+
 }
 
 module.exports = TurnAdmin
