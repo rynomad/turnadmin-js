@@ -151,8 +151,66 @@ class TokenManager extends EventEmitter{
       this.server.on('error', reject)
       this.server.listen(this._json.port || 4443)
     })
+  }
 
+  async me(){
+    return new Promise((resolve, reject) => {
+      this.api.me((err, res) => err ? reject(err) : resolve(res))
+    })
+  }
 
+  async vote(voter, author, permlink, weight){
+    return new Promise((resolve, reject) => { 
+      this.api.vote(voter, author, permlink, weight, (err, res) => err ? reject(err) : resolve(res))
+    })  
+  } 
+
+  async comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata){
+    return new Promise((resolve, reject) => {
+      this.api.comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata, (err,res) => err ? reject(err) : resolve(res))
+    })
+  }
+
+  async revokeToken(){
+    return new Promise((resolve, reject) => {
+      this.api.revokeToken((err, res) => err ? reject(err) : resolve(res))
+    })
+  }
+
+  async reblog(account, author, permlink){
+    return new Promise((resolve, reject) => {
+      this.api.reblog(account, author, permlink, (err, res) => err ? reject(err) : resolve(res))
+    })
+  }
+
+  async follow(follower, following){
+    return new Promise((resolve, reject) => {
+      this.api.follow(follower, following, (err, res) => err ? reject(err) : resolve(res))
+    })
+  }
+
+  async unfollow(unfollower, unfollowing) {
+    return new Promise((resolve, reject) => {
+      this.api.unfollow(unfollower, unfollowing, (err, res) => err ? reject(err) : resolve(res))
+    })
+  }
+
+  async ignore(follower, following) {
+    return new Promise((resolve, reject) => {
+      this.api.ignore(follower, following, (err, res) => err ? reject(err) : resolve(res))
+    })
+  }
+
+  async claimRewardBalance(account, rewardSteem, rewardSbd, rewardVests) {
+    return new Promise((resolve, reject) => {
+      this.api.claimRewardBalance(account, rewardSteem, rewardSbd, rewardVests, (err, res) => err ? reject(err) : resolve(res))
+    })
+  }
+
+  async updateUserMetadata(metadata){
+    return new Promise((resolve, reject) => {
+      this.api.updateUserMetadata(metadata, (err,res) => err ? reject(err) : resolve(res))
+    })
   }
 }
 
