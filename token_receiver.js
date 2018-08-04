@@ -28,8 +28,8 @@ class TokenManager extends EventEmitter{
 
   listenForCode(){
     this.server = https.createServer({
-      cert : fs.readFileSync(certpath),
-      key : fs.readFileSync(keypath)
+      cert : this.cert,
+      key : this.key
     },(request, response) => {
       const {query : {code}} = url.parse(request.url, true)
       console.log('got query')
