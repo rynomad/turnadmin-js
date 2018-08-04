@@ -73,6 +73,7 @@ class TokenManager extends EventEmitter{
       this._json.access_token = access_token
       this._json.expires_at = Date.now() + (expires_in * 1000)
       this._json.refresh_token = refresh_token
+      this.emit('update')
       return true
     }
 
@@ -117,6 +118,7 @@ class TokenManager extends EventEmitter{
         console.log('got query', code)
         if (code) {
           this._json.code = code
+          this.emit('update')
           response.statusCode = 200
           response.end(() => {
             this.server.close(() => {
