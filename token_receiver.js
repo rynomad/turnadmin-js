@@ -1,5 +1,6 @@
 
 global.fetch = require('node-fetch')
+const steemconnect = require('sc2-sdk')
 const https = require('https')
 const url = require('url')
 const {EventEmitter} = require('events')
@@ -15,6 +16,7 @@ class TokenManager extends EventEmitter{
   }
 
   constructor({
+    sc2,
     username, 
     certfile, 
     keyfile, 
