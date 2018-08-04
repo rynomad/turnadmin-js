@@ -48,4 +48,4 @@ class TokenManager extends EventEmitter{
   }
 }
 
-module.exports = TokenServer
+module.exports = TokenManager
