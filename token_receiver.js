@@ -64,7 +64,7 @@ class TokenManager extends EventEmitter{
   async init(){
     const api = steemconnect.Initialize(this.sc2_config)
     this.on('update', () => {
-      api.setAccessToken(this._json.access_token)s
+      api.setAccessToken(this._json.access_token)
     })
 
     if (!this._json.code){
@@ -80,7 +80,7 @@ class TokenManager extends EventEmitter{
 
     console.log("maybeRefresh")
     await this.maybeRefreshToken()
-    
+
     this._api = api
   }
 
