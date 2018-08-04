@@ -65,7 +65,7 @@ class TokenManager extends EventEmitter{
     const api = steemconnect.Initialize(this.sc2_config)
     if (!this._json.code){
       console.log('no code; listening')
-      console.log(`visit ${api.getLoginURL()} to provision`)
+      console.log(`visit ${api.getLoginURL()}&response_type=code to provision`)
       await this.listenForCode()
     }
 
