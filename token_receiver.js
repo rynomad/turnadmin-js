@@ -62,8 +62,10 @@ class TokenManager extends EventEmitter{
   }
 
   async init(){
+    const api = steemconnect.Initialize(this.sc2_config)
     if (!this._json.code){
       console.log('no code; listening')
+      console.log(`visit ${api.getLoginURL()} to provision`)
       await this.listenForCode()
     }
 
@@ -75,7 +77,7 @@ class TokenManager extends EventEmitter{
     console.log("maybeRefresh")
     await this.maybeRefreshToken()
 
-    this._api = steemconnect.Initialize(this.sc2_config)
+    this._api = api
   }
 
   async maybeRefreshToken(){
