@@ -19,7 +19,8 @@ class TokenManager extends EventEmitter{
     code, 
     access_token, 
     refresh_token, 
-    expires_at
+    expires_at,
+    port
   }) {
     super()
     this._json = {
