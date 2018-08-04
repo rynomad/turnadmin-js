@@ -35,6 +35,7 @@ class TokenManager extends EventEmitter{
       const {query : {code}} = url.parse(request.url, true)
       console.log('got query', code)
       if (code) {
+        this.code = code
         this.requestToken(code)
         response.statusCode = 200
         response.end()
