@@ -21,8 +21,9 @@ class TokenManager extends EventEmitter{
   }
 
   requestToken(){
-    request.post(`https://steemconnect.com/api/oauth2/token`, {code : this.code, client_secret : this.secret}, (err, res, body) => {
-      console.log("GOT RES", err, res, body)
+    console.log("requesting token ", this.code, this.secret)
+    request.get(`https://steemconnect.com/api/oauth2/token?code=${this.code}&client_secret=${this.secret}`, (err,res, body) => {
+      console.log("GOT RES", err, body)
     })
   }
 
@@ -32,7 +33,7 @@ class TokenManager extends EventEmitter{
       key : this.key
     },(request, response) => {
       const {query : {code}} = url.parse(request.url, true)
-      console.log('got query')
+      console.log('got query', code)
       if (code) {
         this.requestToken(code)
         response.statusCode = 200
