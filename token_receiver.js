@@ -74,7 +74,7 @@ class TokenManager extends EventEmitter{
     console.log("maybeRefresh")
     await this.maybeRefreshToken()
 
-    this._api = sc2.Initialize(this.sc2_config)
+    this._api = steemconnect.Initialize(this.sc2_config)
   }
 
   async maybeRefreshToken(){
