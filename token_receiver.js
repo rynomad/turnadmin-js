@@ -37,7 +37,10 @@ class TokenManager extends EventEmitter{
     return new Promise((resolve, reject) => {
       request.get(
         `https://steemconnect.com/api/oauth2/token?code=${this.code}&client_secret=${this.secret}`,
-        (err,res, {access_token, username, expires_in, refresh_token, ...body}) => {
+        (err,res, body) => {
+          body = JSON.parse(body)
+          const {access_token, username, expires_in, refresh_token, ..._body} = body
+
           if (access_token && (username === this.username) && expires_in && refresh_token){
             this.access_token = access_token
             this.expires_at = Date.now() + (expires_in * 1000)
