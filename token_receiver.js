@@ -32,7 +32,7 @@ class TokenManager extends EventEmitter{
       keyfile,
       access_token,
       refresh_token,
-      expires_at,
+      expires_at = 0,
       port
     }
   }
@@ -49,13 +49,16 @@ class TokenManager extends EventEmitter{
 
   async init(){
     if (!this._json.code){
+      console.log('no code; listening')
       await this.listenForCode()
     }
 
     if (!this._json.access_token){
+      console.log('no access_token; requesting')
       await this.requestToken()
     }
 
+    console.log("maybeRefresh")
     await this.maybeRefreshToken()
   }
 
@@ -66,7 +69,7 @@ class TokenManager extends EventEmitter{
   }
 
   async consumeToken({access_token, refresh_token, expires_in, username}){
-    if (access_token && (username === this.username) && expires_in && refresh_token){
+    if (access_token && (username === this._json.username) && expires_in && refresh_token){
       this._json.access_token = access_token
       this._json.expires_at = Date.now() + (expires_in * 1000)
       this._json.refresh_token = refresh_token
@@ -91,7 +94,7 @@ class TokenManager extends EventEmitter{
   }
 
   async requestToken(){
-    console.log("requesting token ", this.code, this.secret)
+    console.log("requesting token ", this._json.code, this._json.secret)
     return new Promise((resolve, reject) => {
       request.get(
         `https://steemconnect.com/api/oauth2/token?code=${this._json.code}&client_secret=${this._json.secret}`,
@@ -126,6 +129,8 @@ class TokenManager extends EventEmitter{
           response.end()
         }
       })
+
+      this.server.on('error', reject)
       this.server.listen(this._json.port || 4443)
     })
 
