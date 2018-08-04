@@ -1,3 +1,5 @@
+
+global.fetch = require('node-fetch')
 const https = require('https')
 const url = require('url')
 const {EventEmitter} = require('events')
@@ -25,6 +27,7 @@ class TokenManager extends EventEmitter{
   }) {
     super()
     this._json = {
+      sc2,
       username,
       code,
       secret,
@@ -37,8 +40,16 @@ class TokenManager extends EventEmitter{
     }
   }
 
+  get sc2_config(){
+    return {accessToken : this._json.access_token, ...this._json.sc2}
+  }
+
   get serialize(){
     return JSON.stringify(this._json, null, 4)
+  }
+
+  get api(){
+    if (!this._api) throw new Error('must call init() before accessing api')
   }
 
   persist(filepath){
@@ -60,6 +71,8 @@ class TokenManager extends EventEmitter{
 
     console.log("maybeRefresh")
     await this.maybeRefreshToken()
+
+    this._api = sc2.Initialize(this.sc2_config)
   }
 
   async maybeRefreshToken(){

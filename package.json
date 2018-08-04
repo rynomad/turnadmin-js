@@ -18,7 +18,9 @@
   "homepage": "https://github.com/rynomad/turnadmin-js#readme",
   "dependencies": {
     "fs-jetpack": "^2.1.0",
+    "node-fetch": "^2.2.0",
     "request": "^2.87.0",
+    "sc2-sdk": "^1.0.2",
     "tail-stream": "^0.3.4"
   }
 }
