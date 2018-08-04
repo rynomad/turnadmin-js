@@ -9,6 +9,7 @@ class TokenManager extends EventEmitter{
   static fromFile(filepath){
     const mgr = new TokenManager(JSON.parse(fs.readFileSync(filepath).toString().trim()))
     mgr.persist(filepath)
+    return mgr
   }
 
   constructor({
