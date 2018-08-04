@@ -7,7 +7,7 @@ const DAY_MS = 1000 * 60 * 60 * 24
 
 class TokenManager extends EventEmitter{
   static fromFile(filepath){
-    const mgr = new TokenManager(JSON.parse(fs.readFileSync(jsonfile).toString().trim()))
+    const mgr = new TokenManager(JSON.parse(fs.readFileSync(filepath).toString().trim()))
     mgr.persist(filepath)
   }
 
@@ -39,9 +39,9 @@ class TokenManager extends EventEmitter{
     return JSON.stringify(this._json, null, 4)
   }
 
-  persist(jsonfile){
+  persist(filepath){
     this.on('update', () => {
-      fs.writeFileSync(jsonfile, this.serialize)
+      fs.writeFileSync(filepath, this.serialize)
     })
   }
 
