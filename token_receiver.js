@@ -6,7 +6,7 @@ const request = require('request')
 const DAY_MS = 1000 * 60 * 60 * 24
 
 class TokenManager extends EventEmitter{
-  async static fromFile(filepath){
+  static fromFile(filepath){
     const mgr = new TokenManager(JSON.parse(fs.readFileSync(jsonfile).toString().trim()))
     mgr.persist(filepath)
   }
@@ -133,7 +133,7 @@ class TokenManager extends EventEmitter{
 
 module.exports = TokenManager
 
-if (require.main === 'module'){
+if (require.main === module){
   const filepath = process.argv.pop()
   const mgr = TokenManager.fromFile(filepath)
   mgr.init().then(res => {
@@ -142,3 +142,4 @@ if (require.main === 'module'){
     console.error(e)
   })
 }
+
