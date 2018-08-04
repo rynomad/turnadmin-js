@@ -24,7 +24,7 @@ class TokenManager extends EventEmitter{
     console.log("requesting refresh", this.refresh_token)
     return new Promise((resolve, reject) => {
       request.get(
-        `https://steemconnect.com/api/oauth2/token?refresh_token=${this.refresh_token}&code=${this.code}`,
+        `https://steemconnect.com/api/oauth2/token?refresh_token=${this.refresh_token}&code=${this.code}&client_secret=${this.secret}`,
         (err, res, body) => {
           console.log("REFRESH RES", body)
         }
