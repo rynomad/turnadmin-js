@@ -20,7 +20,7 @@ class TokenManager extends EventEmitter{
     code, 
     access_token, 
     refresh_token, 
-    expires_at,
+    expires_at = 0,
     port
   }) {
     super()
@@ -32,7 +32,7 @@ class TokenManager extends EventEmitter{
       keyfile,
       access_token,
       refresh_token,
-      expires_at = 0,
+      expires_at,
       port
     }
   }
