@@ -52,6 +52,7 @@ class TokenManager extends EventEmitter{
 
   get api(){
     if (!this._api) throw new Error('must call init() before accessing api')
+    return this._api
   }
 
   persist(filepath){
