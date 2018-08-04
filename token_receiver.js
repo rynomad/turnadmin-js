@@ -20,10 +20,40 @@ class TokenManager extends EventEmitter{
     }
   }
 
-  requestToken(){
+  async refreshToken(){
+    console.log("requesting refresh", this.refresh_token)
+    return new Promise((resolve, reject) => {
+      request.post(
+        `https://steemconnect.com/api/oauth2/token`,
+        {
+          client_secret : this.secret,
+          refresh_token : this.refresh_token
+        }, 
+      )
+    })
+  }
+
+  async requestToken(){
     console.log("requesting token ", this.code, this.secret)
-    request.get(`https://steemconnect.com/api/oauth2/token?code=${this.code}&client_secret=${this.secret}`, (err,res, body) => {
-      console.log("GOT RES", err, body)
+    return new Promise((resolve, reject) => {
+      request.post(
+        `https://steemconnect.com/api/oauth2/token`,
+        {
+          code : this.code,
+          client_secret : this.secret
+        }, 
+        (err,res, {access_token, username, expires_in, refresh_token, ...body}) => {
+          if (access_token && (username === this.username) && expires_in && refresh_token){
+            this.access_token = access_token
+            this.expires_at = Date.now() + (expires_in * 1000)
+            this.refresh_token = refresh_token
+            resolve()
+          } else {
+            reject(body)
+          }
+          console.log("GOT RES", err, body)
+        }
+      )
     })
   }
 
