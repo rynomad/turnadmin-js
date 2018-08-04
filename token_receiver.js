@@ -160,6 +160,9 @@ if (require.main === module){
   const mgr = TokenManager.fromFile(filepath)
   mgr.init().then(res => {
     console.log("token manager up", mgr.serialize)
+    mgr.api.me((err, res) => {
+      console.log(err, res)
+    })
   }).catch(e => {
     console.error(e)
   })
