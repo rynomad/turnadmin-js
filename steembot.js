@@ -1,6 +1,7 @@
 
 global.fetch = require('node-fetch')
 const steemconnect = require('sc2-sdk')
+const steem = require('steem')
 const https = require('https')
 const url = require('url')
 const {EventEmitter} = require('events')
@@ -217,6 +218,47 @@ class SteemBot extends EventEmitter{
     return new Promise((resolve, reject) => {
       this.api.updateUserMetadata(metadata, (err,res) => err ? reject(err) : resolve(res))
     })
+  }
+
+  async reply({author, permlink, reply : {title = 'reply', body = 'body', metas = null}}){
+    const add = crypto.getRandomBytes(32).toString('hex')
+    const reply_permlink = `permlink-${add}`
+    await this.comment(author, permlink, this.username, title, body, meta)
+    return reply_permlink
+  }
+
+  async hasActiveVote({voter : _voter, author = this.bot.username, permlink}){
+    return new Promise((resolve,reject) => {
+      steem.api.getActiveVotes(author, permlink, (err, res) => {
+        if (err) return reject(err)
+        for (let {voter} of res){
+          if (voter === _voter) return resolve(true)
+        }
+        resolve(false)
+      })
+    })
+  }
+
+  async waitForActiveVote({author = this.username, permlink, voter}){
+    do {
+      if (await this.hasActiveVote({voter, author, permlink})) return true
+    } while(await wait(1000))
+  }
+
+  async commentVotable({author, permlink}){
+    const votable_permlink = `${permlink}-${crypto.getRandomBytes(32).toString('hex')}`
+    await this.comment(author, permlink, this.username, votable_permlink, 'VOTE', 'VOTE', null)
+    return votable_permlink
+  }
+
+  async getPaymentAsVote({author, permlink, voter, quantity = 1}){
+    const votables = []
+    for (let i = 0; i < quantity; i++){
+      votables.push(await this.commentVotable({author, permlink}))
+    }
+    return Promise.all(
+      votables.map(permlink => this.waitForActiveVote({permlink, voter}))
+    )
   }
 }
 

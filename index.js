@@ -4,16 +4,18 @@ const steem = require('steem')
 const nacl = require('nacl')
 const jetpack = require('fs-jetpack')
 const passgen = require('generate-password')
+const crypto = require('crypto')
 const CHARGE_INTERVAL_INCREMENT = 60000
 const wait = async (ms) => new Promise((resolve,reject) => setTimeout(() => resolve(true), ms))
 class STurn {
 
   costructor({
     botfile,
-    realm,
+    realm,s
     port,
     credentialsfile,
     cryptoboxfile,
+    statefile
   }){
     this.realm = realm
     this.port = port
@@ -21,19 +23,23 @@ class STurn {
     this.turn = new TurnAdmin()
     this.credentialsfile = credentialsfile
     this.cryptoboxfile = cryptoboxfile
+    this.statefile = statefile
   }
 
   async init(){
     this.turn.init()
 
     await this.bot.init()
-
     await this.getCredentialsFromFile()
     await this.syncCredentials()
-
-    await this.listenForCredentialRequests()
-
     await this.syncPublicKey()
+    await this.syncStateFile()
+
+    this.listenForCredentialRequests()
+  }
+
+  async syncStateFile(){
+    this.state = ('file' === jetpack.exists(this.statefile)) ? (await jetpack.readAsync(this.statefile, 'json')) : {}
   }
 
   async syncPublicKey(){
@@ -53,18 +59,16 @@ class STurn {
   }
 
   async setPublicKeyPost(){
-    return new Promise((resolve,reject) => {
-      this.bot.api.comment(
-        '', 
-        this.bot.username, 
-        this.bot.username, 
-        'sturn-public-key', 
-        'Sturn Public Key', 
-        this.cryptobox.public.toString('hex'),
-        null,
-        (err, res) => err ? reject(err) : resolve(res)
-      )
-    })
+    await this.bot.comment(
+      '', 
+      this.bot.username, 
+      this.bot.username, 
+      'sturn-public-key', 
+      'Sturn Public Key', 
+      this.cryptobox.public.toString('hex'),
+      null
+    )
+    return 'sturn-public-key'
   }
 
 
@@ -114,6 +118,29 @@ class STurn {
     })
   }
 
+  async getPublicKeyComments(){
+    return new Promise((resolve, reject) => {
+      steem.api.getContentReplies(this.bot.username, 'sturn-public-key', (err, res) => err ? reject(err) : resolve(res))
+    })
+  }
+
+  async pollCredentialRequests(){
+    const pubkey_comments = (await this.getPublicKeyComments())
+
+    const requests = []
+    for (const {author, permlink} of pubkey_comments){
+      if (!(await this.hasVoteFromUser({author, permlink}))){
+        await this.vote({author, permlink})
+        requests.push({
+          user : author,
+          permlink
+        })
+      }
+    }
+
+    return requests
+  }
+
   async listenForCredentialRequests(){
     while (await wait(2000)){
       const requests = await this.pollCredentialRequests()
@@ -124,7 +151,18 @@ class STurn {
     }
   }
 
-  async processCredentialRequest({user, nonce, permlink}){
+  async vote({author, permlink}){
+    return this.bot.vote(this.bot.username, author, permlink, 100)
+  }
+
+  async postReply({user, permlink, reply}){
+    const add = crypto.getRandomBytes(32).toString('hex')
+    const reply_permlink = `permlink-${add}`
+    await this.bot.comment(user, permlink, this.bot.username, reply_permlink,'reply',reply)
+    return reply_permlink
+  }
+
+  async processCredentialRequest({user, permlink}){
     const password = passgen.generate({
       length : 32,
       numbers : true,
@@ -139,16 +177,15 @@ class STurn {
     await this.syncCredentials()
 
     const pubkey = await this.getUserPublicKey(user)
+    const nonce = crypto.randomBytes(24)
 
     const boxed = nacl.box(iceServerConfig, nonce, pubkey, this.cryptobox.private)
 
-    const voteable_permlinks = await this.postVotables(permlink)
+    await this.bot.getPaymentAsVote({voter : user, permlink})
 
-    await this.waitForVotes(voteable_permlinks)
+    const credential_permlink = await this.bot.reply({user, permlink, reply : `${boxed.toString('hex')}:${nonce.toString('hex')}`})
 
-    const credential_permlink = await this.postReply({user, permlink, reply : boxed})
-
-    const {connection} = await this.userConnect(user)
+    const {connection} = await this.userConnect(user) 
 
     this.credentials.delete(user)
 
@@ -173,6 +210,31 @@ class STurn {
     }
   }
 
+  async hasVote({user, author = this.bot.username, permlink}){
+    return new Promise((resolve,reject) => {
+      steem.api.getActiveVotes(author, permlink, (err, res) => {
+        if (err) return reject(err)
+        for (let {voter} of res){
+          if (voter === user) return resolve(true)
+        }
+        resolve(false)
+      })
+    })
+  }
+
+  async waitForVote({user, permlink}){
+    do {
+      if (await this.hasVote({user, permlink})) return true
+    } while(await wait(1000))
+  }
+
+  async postVotables(author, permlink){
+    const add = crypto.randomBytes(16).toString('hex')
+    const post_permlink = `${permlink}-${add}`
+    await this.bot.comment(author, permlink, this.bot.user, post_permlink, "Votable", 'votable',null)
+    return post_permlink
+  }
+
   async getUserPublicKey(user = this.steembot.username){
     return new Promise((resolve,reject) => {
       steem.api.getContent(user, 'sturn-public-key', function(err, result) {
@@ -180,21 +242,5 @@ class STurn {
         resolve(result.id ? result : null)
       })
     })
-  }
-
-  async postVotables(permlink){
-
-  }
-
-  async waitForVotes(permlinks){
-
-  }
-
-  async gotVote({user, permlink}){
-
-  }
-
-  async postReply({user, permlink, reply}){
-
   }
 }

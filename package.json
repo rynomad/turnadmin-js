@@ -24,6 +24,7 @@
     "request": "^2.87.0",
     "sc2-sdk": "^1.0.2",
     "steem": "^0.7.1",
-    "tail-stream": "^0.3.4"
+    "tail-stream": "^0.3.4",
+    "tweetnacl": "^1.0.0"
   }
 }
