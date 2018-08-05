@@ -1,138 +1,200 @@
-const {execSync, exec} = require('child_process')
-const {EventEmitter} = require('events')    
-const logs = require('fs-jetpack').cwd('/var/log/')
-const ts = require('tail-stream')
-const {parseLogEvent, consumeLogEvent} = require('./events.js')
+const Steembot = require('./steembot.js')
+const TurnAdmin = require('./turnadmin.js')
+const steem = require('steem')
+const nacl = require('nacl')
+const jetpack = require('fs-jetpack')
+const passgen = require('generate-password')
+const CHARGE_INTERVAL_INCREMENT = 60000
+const wait = async (ms) => new Promise((resolve,reject) => setTimeout(() => resolve(true), ms))
+class STurn {
 
+  costructor({
+    botfile,
+    realm,
+    port,
+    credentialsfile,
+    cryptoboxfile,
+  }){
+    this.realm = realm
+    this.port = port
+    this.bot = Steembot.fromFile(botfile)
+    this.turn = new TurnAdmin()
+    this.credentialsfile = credentialsfile
+    this.cryptoboxfile = cryptoboxfile
+  }
 
-function debracket(string){
-  return string.match(/<\S*>/g).map(str => str.substr(1, str.length - 2))
-}
+  async init(){
+    this.turn.init()
 
-function getMatch(string, regex){
-  let match = string.match(regex)
-  if (!match) return null
-  match = match[0]
-  return match
-}
+    await this.bot.init()
 
-class TurnAdmin extends EventEmitter{
-  static getPID(){
-    try {
-      return Number.parseInt(execSync('pgrep turnserver').toString().trim()) - 1
-    } catch (e) {
-      return 0
+    await this.getCredentialsFromFile()
+    await this.syncCredentials()
+
+    await this.listenForCredentialRequests()
+
+    await this.syncPublicKey()
+  }
+
+  async syncPublicKey(){
+    this.cryptobox = ('file' === jetpack.exists(this.cryptoboxfile)) ? Object.keys(
+      await jetpack.readAsync(this.credentialsfile, 'json')
+    ).reduce((o, k) => ({[k] : Buffer.from(o[k], 'hex'), ...o}),{}) : nacl.boxKeypair()
+  
+    await jetpack.writeAsync(this.credentialsfile, {private : this.cryptobox.private.toString('hex'), public : this.cryptobox.public.toString('hex')}, {
+      overwrite : true
+    })
+
+    const pubkeypost = await this.getUserPublicKey()
+
+    if (!pubkeypost || (pubkeypost.body !== this.cryptobox.public.toString('hex'))){
+      await this.setPublicKeyPost()
     }
   }
 
-  static getLogFile(){
-    return logs.path(logs.find({matching : `turn_${this.getPID()}*.log`}).pop())
+  async setPublicKeyPost(){
+    return new Promise((resolve,reject) => {
+      this.bot.api.comment(
+        '', 
+        this.bot.username, 
+        this.bot.username, 
+        'sturn-public-key', 
+        'Sturn Public Key', 
+        this.cryptobox.public.toString('hex'),
+        null,
+        (err, res) => err ? reject(err) : resolve(res)
+      )
+    })
   }
 
-  constructor(){
-    super()
 
-    this.connections = new Map()
+  async getCredentialsFromFile(){
+    this.credentials = ('file' === jetpack.exists(this.credentialsfile)) ? (await jetpack.readAsync(this.credentialsfile)).trim().split('\n').reduce((map, line) => {
+      const {user, ...credentials} = JSON.parse(line)
+      map.set(user, {user, ...credentials})
+      return map
+    },new Map()) : new Map()
+  }
 
-    this.boots = new Map()
+  async saveCredentialsToFile(){
+    const str = ''
+    for (let [_, credentials] of this.credentials){
+      str += `${JSON.stringify(credentials)}\n`
+    }
+    return jetpack.writeAsync(this.credentialsfile, str, {overwrite : true})
+  }
 
-    if (!(this.pid = TurnAdmin.getPID())){
-      throw new Error('Turn server not found')
+  async syncCredentials(){
+    for (let [user, {password}] of this.credentials){
+      await this.turn.addUser({user, password, realm})
     }
 
-    const logfile = TurnAdmin.getLogFile()
+    const users = await this.turn.listUsers()
 
-    console.log("logfile : ", logfile)
-    this.tail = ts.createReadStream(logfile, {
-      beginAt : 'end',
-      endOnError : true
-    })
-
-    this.tail.on('data', (data) => {
-      const raw = data.toString().trim()
-      const event = parseLogEvent(raw)
-      if (event) {
-        this.emit('log', {raw, ...event})
+    for (let {user, realm} of users){
+      if ((realm !== this.realm) || !this.credentials.has(user)){
+        await this.turn.deleteUser({user, realm})
       }
-    })
+    }
 
-    this.on('log', (event) => {
-      console.log("CONSUME LOG EVENT", event)
-      event = consumeLogEvent(this, event)
-      if (event){
-        this.emit('client', event)
-      } else {
-        console.debug("IGNORE")
-      }
-    })
+    await this.saveCredentialsToFile()
+  }
 
-    setInterval(() => {
-      for (let [time, cmd] of this.boots){
-        if (time < Date.now()){
-          console.log("clearing boot", cmd)
-          exec(cmd, (err, stdout, stderr) => {
-            if (err) {
-              console.log("error clearing boot", cmd)
-              console.log(err)
-            }
-            this.boots.delete(time)
-          })
-        }
-      }
-    },10000)
-
-    process.on('exit', () => {
-      console.log('clearing remaining boots')
-      for (let [_, cmd] of this.boots){
-        execSync(cmd)
-      }
-      console.log('cleared')
+  translateTurnEvents(){
+    this.turn.on('client', ({type, data}) => {
+      this.emit(`${data.user}_${type}`, data)
     })
   }
 
-  async exec(argstr){
+  async userConnect(user){
     return new Promise((resolve, reject) => {
-      exec(`turnadmin ${argstr}`, (err, stdout, stderr) => {
-        if (err){
-          reject(err)
+      this.once(`${user}_connect`, (data) => {
+        resolve(data)
+      })
+    })
+  }
+
+  async listenForCredentialRequests(){
+    while (await wait(2000)){
+      const requests = await this.pollCredentialRequests()
+
+      requests.forEach(async (req) => {
+        await this.processCredentialRequest(req)
+      })
+    }
+  }
+
+  async processCredentialRequest({user, nonce, permlink}){
+    const password = passgen.generate({
+      length : 32,
+      numbers : true,
+    })
+
+    this.credentials.set(user, {
+      user,
+      password,
+      permlink
+    })
+
+    await this.syncCredentials()
+
+    const pubkey = await this.getUserPublicKey(user)
+
+    const boxed = nacl.box(iceServerConfig, nonce, pubkey, this.cryptobox.private)
+
+    const voteable_permlinks = await this.postVotables(permlink)
+
+    await this.waitForVotes(voteable_permlinks)
+
+    const credential_permlink = await this.postReply({user, permlink, reply : boxed})
+
+    const {connection} = await this.userConnect(user)
+
+    this.credentials.delete(user)
+
+    await this.syncCredentials()
+
+    let charge_interval = CHARGE_INTERVAL_INCREMENT
+    let charge_permlink = credential_permlink
+    while (await wait(charge_interval)){
+      if (!connection.last_usage) return
+      
+      if ((Date.now() - connection.last_usage.time) < charge_interval){
+        const got_vote = await this.gotVote({user, permlink : charge_permlink})
+        if (got_vote){
+          charge_permlink = await this.postReply({user, permlink : charge_permlink, reply : "usage"})
+          charge_interval += CHARGE_INTERVAL_INCREMENT
         } else {
-          resolve({stdout, stderr})
+          await this.turn.bootConnection(connection)
         }
-      })
-    })
+      } else {
+        return
+      }
+    }
   }
 
-  async addUser({user, password, realm}){
-    const {stdout, stderr} = await this.exec(`-a -u ${user} -p ${password} -r ${realm}`)
-    console.log('out',stdout)
-    console.error('err',stderr)
-  }
-
-  async listUsers(){
-    const {stdout, stderr} = await this.exec(`-l`)
-    return stdout.trim().split('\n').map(str => {
-      const [user, realm] = str.substr(0, str.length - 1).split('[')
-      return {user, realm}
-    })
-  }
-
-  async deleteUser({user, realm}){
-    const {stdout, stderr} = await this.exec(`-d -u ${user} -r ${realm}`)
-    console.log('out',stdout)
-    console.error('err',stderr)
-  }
-
-  async bootConnection({ip}, callback){
-    return new Promise((resolve, reject) => {
-      exec(`iptables -A INPUT -p udp -s ${ip} -j DROP`, (err, stdout, stderr) => {
+  async getUserPublicKey(user = this.steembot.username){
+    return new Promise((resolve,reject) => {
+      steem.api.getContent(user, 'sturn-public-key', function(err, result) {
         if (err) return reject(err)
-        console.log('set iptables tule')
-        this.boots.set(Date.now() + 120000, `iptables -D INPUT -p udp -s ${ip} -j DROP`)
-        resolve()
+        resolve(result.id ? result : null)
       })
     })
   }
 
-}
+  async postVotables(permlink){
 
-module.exports = TurnAdmin
+  }
+
+  async waitForVotes(permlinks){
+
+  }
+
+  async gotVote({user, permlink}){
+
+  }
+
+  async postReply({user, permlink, reply}){
+
+  }
+}

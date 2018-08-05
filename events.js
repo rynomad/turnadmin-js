@@ -56,6 +56,7 @@ const _parseLogEvent = {
       data : {
         realm,
         user,
+        time : Date.now(),
         rp, rb, sp, sb
       }
     }
@@ -112,6 +113,7 @@ const _consumeLogEvent = {
   },
   usage(admin, {user, realm, ...usage}){
     const connection = admin.connections.get(`${user}:${realm}`) || this.dead_clients.get(`${user}:${realm}`)
+    connection.last_usage = usage
     if (!admin.connections.has(`${user}:${realm}`)) {
       console.log("reviving dead connection")
       this.dead_clients.delete(`${user}:${realm}`)
