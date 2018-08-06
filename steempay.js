@@ -99,11 +99,16 @@ class SteemPay {
   }
 
   async getUserPublicKey(user){
+    if (this._pubkeys.has(user)) return this._pubkeys.get(user)
+
     const post = await this.getPost({
       author : user,
       permlink : 'STEEMPAY-PUBLIC-KEY'
     })
-    return Buffer.from(post.body, 'hex')
+
+    const pubkey = Buffer.from(post.body, 'hex')
+    this._pubkeys.set(user, pubkey)
+    return pubkey
   }
 
   async postPublicKey(){
