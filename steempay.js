@@ -1,5 +1,6 @@
 const nacl = require('tweetnacl')
 const sc2_sdk = require('sc2-sdk')
+const steem = require('steem')
 
 class SteemPay {
   constructor({
@@ -89,6 +90,28 @@ class SteemPay {
     const reply_permlink = crypto.getRandomBytes(32).toString('hex')
     await this.comment(author, permlink, this.username, reply_permlink, title, body, meta)
     return reply_permlink
+  }
+
+  async getPost({author, permlink}){
+    return new Promise((resolve, reject) => {
+      steem.api.getContent(author, permlink, (err, res) => err ? reject(err) : resolve(res));
+    })
+  }
+
+  async getUserPublicKey(user){
+    const post = await this.getPost({
+      author : user,
+      permlink : 'STEEMPAY-PUBLIC-KEY'
+    })
+    return Buffer.from(post.body, 'hex')
+  }
+
+  async postPublicKey(){
+    await this.post({
+      permlink : 'STEEMPAY-PUBLIC_KEY',
+      title : 'Public Key',
+      body : this.keypair.public.toString('hex')
+    })
   }
 
   async getReplies({author = this.username, permlink, commentor, title}){
