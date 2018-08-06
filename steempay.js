@@ -9,16 +9,21 @@ class SteemPay {
   }){
     this._json = {
       sc2,
-      username
+      username,
+      keypair
     }
 
     this._api = sc2_sdk.Initialize(sc2)
-    this._cryptobox = nacl.box.keyPair()
+    this._keypair = keypair || nacl.box.keyPair()
   }
 
   get api(){
     if (!this._api.accessToken) throw new Error('cannot use api without access token')
     return this._api
+  }
+
+  async init(){
+    await this.postPublicKey()
   }
   
   async me(){
@@ -115,7 +120,7 @@ class SteemPay {
     await this.post({
       permlink : 'STEEMPAY-PUBLIC_KEY',
       title : 'Public Key',
-      body : this.keypair.public.toString('hex')
+      body : this._keypair.public.toString('hex')
     })
   }
 
@@ -134,7 +139,7 @@ class SteemPay {
   async replyEncrypted({author, permlink, reply : {title, body}}) {
     const pubkey = await this.getUserPublicKey(author)
     const nonce = crypto.getRandomBytes(24)
-    const box = nacl.box(body, 24, pubkey, this.keypair.private)
+    const box = nacl.box(body, 24, pubkey, this._keypair.private)
     const permlink = nonce.toString('hex')
     await this.comment(author, permlink, this.username, nonce.toString('hex'), title, box.toString('hex'))
     return permlink
@@ -144,7 +149,7 @@ class SteemPay {
     const box = Buffer.from(body, 'hex')
     const nonce = Buffer.from(permlink, 'hex')
     const pubkey = await this.getUserPublicKey(author)
-    return nacl.box.open(box, nonce, pubkey, this.keyPair.private )
+    return nacl.box.open(box, nonce, pubkey, this._keypair.private )
   }
 
   async placeOrder({author, permlink}){
