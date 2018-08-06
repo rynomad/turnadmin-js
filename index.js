@@ -11,7 +11,7 @@ class STurn {
 
   costructor({
     botfile,
-    realm,s
+    realm,
     port,
     credentialsfile,
     cryptoboxfile,
