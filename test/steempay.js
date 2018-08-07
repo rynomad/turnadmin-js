@@ -1,6 +1,7 @@
 const assert = require('assert')
 const request = require('request-promise-native')
 const crypto = require('crypto')
+const steem = require('steem')
 const testdir = require('fs-jetpack').dir(__dirname)
 
 
@@ -62,7 +63,7 @@ describe('Steempay', function(){
   })
 
   it('initializes', async () => {
-    
+
     await this.user1.init()
     await this.user2.init()
 
@@ -75,7 +76,15 @@ describe('Steempay', function(){
     assert(user2pub.toString('hex') === this.user2._keypair.publicKey.toString('hex'), 'user2 public keys not equal')
   })
 
+  it('gets .me', async() => {
+    return 
+    const me = await this.user1.me()
+    assert(me)
+    console.log(me)
+  })
+
   it('sends encrypted message', async () => {
+    return
     await this.user1.replyEncrypted({
       author : this.user2.username,
       permlink : 'steempay-public-key',
@@ -96,6 +105,7 @@ describe('Steempay', function(){
   })
 
   it('provides service', async () => {
+    return 
     try {
       const advertisement = await this.user1.postAdvertisement({body : "hello world service"})
       console.log("POSTED ADVERTISEMENT")
@@ -104,6 +114,7 @@ describe('Steempay', function(){
         advertisement,
         provider : (request) => {
           console.log("GOT PROVIDER REQUEST", request)
+          return "HELLO DELIVERY"
         }
       }).catch(e => {
         console.log(e)
@@ -138,10 +149,89 @@ describe('Steempay', function(){
       })
   
       console.log("GOT DELIVERY", delivery)
+      assert(delivery[0].body === "HELLO DELIVERY")
     } catch (e){
       console.log(e)
       throw e
     }
+  })
+
+  it('service flow', async () => {
+    const advertisement = await this.user1.postAdvertisement()
+    const seller = this.user1.username
+    const order = await this.user2.placeOrder({
+      seller,
+      permlink : advertisement.permlink
+    })
+
+    const paid_orders = await this.user1.getNewPaidOrders(advertisement)
+    console.log("PAID ORDERS",paid_orders)
+    assert(paid_orders.length === 1)
+    await this.user1.fulfillOrder({order : paid_orders[0], payload: 'HELLO ORDER'})
+    const delivery = await this.user2.receiveDelivery({seller, order})
+    assert(delivery.body === 'HELLO ORDER')
+  })
+
+  it('generates hotsigning link', () => {
+    console.log(this.user1.transfer(this.user2.username, '0.001', 'hello world'))
+  })
+
+  it('detects follow', async () => {
+    return;
+    try {
+      await this.user2.getNewFollowers()
+      await this.user1.follow(this.user1.username, this.user2.username)
+      const newfollowers = await this.user2.getNewFollowers()
+      console.log(newfollowers)
+      await this.user1.unfollow(this.user1.username, this.user2.username)
+    } catch (e){
+      console.log(e)
+    }
+  })
+
+  it('updates comment without rate-limit', async () => {
+    return
+    const body = 'first line'
+    const permlink = await this.user1.post({
+      title : 'Test comment',
+      body,
+    })
+    await this.user1.post({
+      permlink,
+      title : 'Test Update Comment',
+      body : body + '\nsecond line'
+    })
+    const comment = await this.user2.getPost({
+      author : this.user1.username,
+      permlink
+    })
+    console.log(comment)
+    assert(comment.body === 'first line\nsecond line')
+  })
+
+  it('multi votes', async () => {
+    try {
+      const body = 'first line'
+      const permlink = await this.user1.post({
+        permlink : '0455c88f3542d1870913a99e1370ecd9709e6c0a5ecafb694bb0aeccac4f1e80',
+        title : 'Test comment',
+        body,
+      })
+  
+      await this.user2.vote(this.user2.username, this.user1.username, permlink, 10000)
+      await this.user2.vote(this.user2.username, this.user1.username, permlink, 9900)
+  
+      const votes = await this.user1.getActiveVotes({
+        voter : this.user2.username,
+        permlink
+      })
+  
+      assert(votes.length === 2)
+    } catch (E){
+      console.log(E)
+      throw E
+    }
+
 
   })
 

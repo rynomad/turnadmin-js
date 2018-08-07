@@ -1,6 +1,7 @@
 const http = require('http')
 const url = require("url")
 const steemconnect = require('sc2-sdk')
+const steem = require('steem')
 const testdir = require('fs-jetpack').dir('test')
 
 console.log("TESTDIR", testdir.cwd())
@@ -21,7 +22,9 @@ const api = steemconnect.Initialize({
   "scope": [
     "vote",
     "offline",
-    "comment"
+    "comment",
+    "custom_json",
+    "delete_comment"
   ]
 })
 
