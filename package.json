@@ -4,7 +4,8 @@
   "description": "node wrapper to call turnadmin (linux only)",
   "main": "index.js",
   "scripts": {
-    "test": "npm test"
+    "test": "npm test",
+    "get_test_keys": "node ./scripts/getTestKeys.js"
   },
   "repository": {
     "type": "git",
@@ -26,5 +27,9 @@
     "steem": "^0.7.1",
     "tail-stream": "^0.3.4",
     "tweetnacl": "^1.0.0"
+  },
+  "devDependencies": {
+    "mocha": "^5.2.0",
+    "request-promise-native": "^1.0.5"
   }
 }

@@ -1,29 +1,55 @@
+const crypto = require('crypto')
+
 const nacl = require('tweetnacl')
 const sc2_sdk = require('sc2-sdk')
 const steem = require('steem')
 
+function bufToUint(buf){
+  const uint = new Uint8Array(buf.byteLength)
+  for (let i = 0; i < buf.byteLength; i++){
+    uint[i] = buf[i]
+  }
+  return uint
+}
+
 class SteemPay {
   constructor({
     sc2,
-    username
+    username,
+    keypair = nacl.box.keyPair()
   }){
     this._json = {
       sc2,
       username,
       keypair
     }
+    console.log("KEYPAIR", keypair)
+    this.username = username
 
     this._api = sc2_sdk.Initialize(sc2)
-    this._keypair = keypair || nacl.box.keyPair()
+    this._keypair = keypair
+    this._keypair.publicKey = Buffer.from(this._keypair.publicKey)
+    this._keypair.secretKey = Buffer.from(this._keypair.secretKey)
   }
 
   get api(){
-    if (!this._api.accessToken) throw new Error('cannot use api without access token')
+    if (!this._api.options.accessToken) {
+      console.error(this._api)
+      throw new Error('cannot use api without access token')
+    }
     return this._api
   }
 
   async init(){
     await this.postPublicKey()
+  }
+
+  async postPublicKey(){
+    await this.post({
+      permlink : 'steempay-public-key',
+      title : 'Public Key',
+      body : this._keypair.publicKey.toString('hex')
+    })
   }
   
   async me(){
@@ -86,13 +112,14 @@ class SteemPay {
     })
   }
 
-  async post({permlink = crypto.getRandomBytes(64).toString('hex'), title, body, meta}){
-    await this.comment('', this.username, this.username, permlink, title, body, meta)
+  async post({permlink = crypto.randomBytes(32).toString('hex'), title, body, meta}){
+    console.log(permlink, title, body, meta)
+    await this.comment('', this.username, this.username, permlink, title, body, meta || null)
     return permlink
   }
 
   async reply({author, permlink, reply : {title = 'reply', body = 'body', meta}}){
-    const reply_permlink = crypto.getRandomBytes(32).toString('hex')
+    const reply_permlink = crypto.randomBytes(32).toString('hex')
     await this.comment(author, permlink, this.username, reply_permlink, title, body, meta)
     return reply_permlink
   }
@@ -104,25 +131,19 @@ class SteemPay {
   }
 
   async getUserPublicKey(user){
-    if (this._pubkeys.has(user)) return this._pubkeys.get(user)
+    //if (this._pubkeys.has(user)) return this._pubkeys.get(user)
 
     const post = await this.getPost({
       author : user,
-      permlink : 'STEEMPAY-PUBLIC-KEY'
+      permlink : 'steempay-public-key'
     })
 
     const pubkey = Buffer.from(post.body, 'hex')
-    this._pubkeys.set(user, pubkey)
+    //this._pubkeys.set(user, pubkey)
     return pubkey
   }
 
-  async postPublicKey(){
-    await this.post({
-      permlink : 'STEEMPAY-PUBLIC_KEY',
-      title : 'Public Key',
-      body : this._keypair.public.toString('hex')
-    })
-  }
+
 
   async getReplies({author = this.username, permlink, commentor, title}){
     return new Promise((resolve, reject) => 
@@ -138,18 +159,45 @@ class SteemPay {
 
   async replyEncrypted({author, permlink, reply : {title, body}}) {
     const pubkey = await this.getUserPublicKey(author)
-    const nonce = crypto.getRandomBytes(24)
-    const box = nacl.box(body, 24, pubkey, this._keypair.private)
-    const permlink = nonce.toString('hex')
-    await this.comment(author, permlink, this.username, nonce.toString('hex'), title, box.toString('hex'))
-    return permlink
+    console.log(pubkey, pubkey.size, pubkey)
+    const nonce = crypto.randomBytes(24)
+    const box = Buffer.from(nacl.box(
+      bufToUint(Buffer.from(body)), 
+      bufToUint(nonce), 
+      bufToUint(pubkey), 
+      bufToUint(this._keypair.secretKey)
+    )).toString('hex')
+
+    const reply_permlink = nonce.toString('hex')
+    await this.comment(author, permlink, this.username, reply_permlink, title, box, {"encrypted" : pubkey.toString('hex')})
+    return reply_permlink
+  }
+
+  async getEncryptedReplies({permlink, commentor, title}){
+    const replies = (await this.getReplies({permlink, commentor, title})).filter(({json_metadata}) => {
+      const meta = JSON.parse(json_metadata)
+
+      console.log("meta", meta,this._keypair.publicKey.toString('hex'))
+      return (meta.encrypted === this._keypair.publicKey.toString('hex'))
+    })
+
+    const decrypted = []
+    for(let reply of replies){
+      const {author, permlink, body} = reply
+      const decrypted_body = await this.decryptReply({author, permlink, body})
+
+      decrypted.push({...reply, body : decrypted_body})
+    }
+
+    console.log(decrypted)
+    return decrypted
   }
 
   async decryptReply({author, permlink, body}){
-    const box = Buffer.from(body, 'hex')
-    const nonce = Buffer.from(permlink, 'hex')
-    const pubkey = await this.getUserPublicKey(author)
-    return nacl.box.open(box, nonce, pubkey, this._keypair.private )
+    const box = bufToUint(Buffer.from(body, 'hex'))
+    const nonce = bufToUint(Buffer.from(permlink, 'hex'))
+    const pubkey = bufToUint((await this.getUserPublicKey(author)))
+    return Buffer.from(nacl.box.open(box, nonce, pubkey, bufToUint(this._keypair.secretKey) )).toString()
   }
 
   async placeOrder({author, permlink}){
@@ -168,9 +216,11 @@ class SteemPay {
     let last_author = this.username
 
     do {
+      console.log("get invoice", last_author, last_permlink)
       invoice_comment = await this.waitForInvoiceComment({last_author, last_permlink})
       last_author = invoice_comment.author
       last_permlink = invoice_comment.permlink
+      console.log("invoice_comment", invoice_comment)
       done = !!(invoice_comment.json_metadata)
       invoice.push(invoice_comment)
     } while (!done)
@@ -188,7 +238,7 @@ class SteemPay {
       })
 
       if (comments[0]){
-        return comments[0].permlink
+        return comments[0]
       }
     } while (await wait(1000))
   }
@@ -201,20 +251,16 @@ class SteemPay {
 
   async receiveDelivery({seller, order}){
     do {
-      const replies = await this.getReplies({
+      return this.getEncryptedReplies({
         author : this.username,
         permlink : order,
         commentor : seller,
         title : 'DELIVERY'
       })
-      if (replies[0]) {
-        return this.decryptReply(replies[0])
-      }
     } while(await wait(1000))
   }
 
-  async provideService({description, provider, cost}){
-    const advertisement = await this.postAdvertisement({body : description})
+  async provideService({advertisement, provider, cost}){
     const seen = new Set()
     
     do {
@@ -340,6 +386,6 @@ class SteemPay {
       }
     })
   }
-
-
 }
+
+module.exports = SteemPay
