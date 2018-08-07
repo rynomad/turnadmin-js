@@ -12,6 +12,8 @@ function bufToUint(buf){
   return uint
 }
 
+const wait = (ms) => new Promise((resolve) => setTimeout(() => resolve(true), ms))
+
 class SteemPay {
   constructor({
     sc2,
@@ -114,14 +116,32 @@ class SteemPay {
 
   async post({permlink = crypto.randomBytes(32).toString('hex'), title, body, meta}){
     console.log(permlink, title, body, meta)
-    await this.comment('', this.username, this.username, permlink, title, body, meta || null)
+    try {
+      await this.comment('', this.username, this.username, permlink, title, body, meta || null)
+    } catch (e) {
+      console.warn(e)
+      if (e.error_description.indexOf('STEEM_MIN_ROOT_COMMENT_INTERVAL') >= 0){
+        console.log("waiting 5 min 5 sec to retry")
+        await wait( 5 * 60 * 1000 + 5000)
+        return this.post({permlink, title, body, meta})
+      }
+    }
     return permlink
   }
 
   async reply({author, permlink, reply : {title = 'reply', body = 'body', meta}}){
-    const reply_permlink = crypto.randomBytes(32).toString('hex')
-    await this.comment(author, permlink, this.username, reply_permlink, title, body, meta)
-    return reply_permlink
+    try {
+      const reply_permlink = crypto.randomBytes(32).toString('hex')
+      await this.comment(author, permlink, this.username, reply_permlink, title, body, meta || null)
+      return reply_permlink
+    } catch (e) {
+      console.warn(e)
+      if (e.error_description.indexOf('STEEM_MIN_REPLY_INTERVAL') >= 0){
+        console.log("waiting 22 seconds to retry")
+        await wait(22 * 1000)
+        return this.reply({author, permlink, reply : {title, body, meta}})
+      }
+    }
   }
 
   async getPost({author, permlink}){
@@ -200,7 +220,7 @@ class SteemPay {
     return Buffer.from(nacl.box.open(box, nonce, pubkey, bufToUint(this._keypair.secretKey) )).toString()
   }
 
-  async placeOrder({author, permlink}){
+  async placeOrder({author, advertisement : permlink}){
     return this.reply({
       author,
       permlink,
@@ -210,14 +230,18 @@ class SteemPay {
     })
   }
 
-  async receiveInvoice({permlink : last_permlink}){
+  async receiveInvoice({permlink : last_permlink, seller}){
     const invoice = []
     let done = false
     let last_author = this.username
 
     do {
       console.log("get invoice", last_author, last_permlink)
-      invoice_comment = await this.waitForInvoiceComment({last_author, last_permlink})
+      const invoice_comment = await this.waitForInvoiceComment({
+        author : last_author, 
+        permlink : last_permlink,
+        seller
+      })
       last_author = invoice_comment.author
       last_permlink = invoice_comment.permlink
       console.log("invoice_comment", invoice_comment)
@@ -230,6 +254,7 @@ class SteemPay {
 
   async waitForInvoiceComment({author, permlink, seller}){
     do {
+      console.log("poll replies for invoice comment", author, permlink, seller)
       const comments = await this.getReplies({
         author,
         permlink,
@@ -244,7 +269,8 @@ class SteemPay {
   }
 
   async payInvoice({seller, invoice}){
-    for (let permlink of invoice){
+    for (let {permlink} of invoice){
+      console.log("pay invoice", seller, invoice, permlink)
       await this.vote(this.username, seller, permlink, 10000)
     }
   }
@@ -266,13 +292,17 @@ class SteemPay {
     do {
       const new_orders = await this.receiveOrders({seen, advertisement})
       for (let order of new_orders){
-        this.fulfillOrder({order, provider, cost})
+        console.log('fulfill order',order )
+        this.fulfillOrder({order, provider, cost}).catch(e => {
+          console.error(e)
+        })
       }
     } while(await wait(1000)) 
   }
 
-  async postAdvertisement({body, meta}){
+  async postAdvertisement({permlink, body, meta}){
     return this.post({
+      permlink,
       title : 'ADVERTISEMENT',
       body,
       meta
@@ -291,6 +321,7 @@ class SteemPay {
 
       for (let {permlink : order, title, author} of replies){
         if ((title === 'ORDER') && (!seen.has(order))){
+          console.log("got new order", order)
           seen.add(order)
           new_orders.push({order, title, buyer : author})
         }
@@ -301,17 +332,21 @@ class SteemPay {
     } while(await wait(1000))
   }
 
-  async fulfillOrder({order : {order, title, buyer}, provider, cost}){
+  async fulfillOrder({order : {order, buyer}, provider, cost}){
+    console.log("fulfil order", order, buyer)
     const permlink = await this.postInvoice({
       author : buyer,
       order,
       quantity : cost
     })
+    console.log("POSTED INVOICE")
 
     await this.receivePayment({
       permlink,
       buyer,
     })
+
+    console.log("RECEIVED PAYMENT")
 
     const delivery = await provider({buyer})
 
@@ -320,6 +355,7 @@ class SteemPay {
       buyer,
       payload : delivery
     })
+    console.log("SENT DELIVERY")
   }
 
 
@@ -328,13 +364,14 @@ class SteemPay {
     let head;
 
     for (let i = 0; i < quantity; i++){
+      console.log('post invoice reply', last_author, last_permlink, order,)
       last_permlink = await this.reply({
         author : last_author,
         permlink : last_permlink,
         reply : {
           title : 'INVOICE',
           body : order,
-          meta : (i === quantity - 1) ? `{"end":true}` : null
+          meta : (i === (quantity - 1)) ? {"end":true} : null
         }
       })
       last_author = this.username
@@ -351,7 +388,7 @@ class SteemPay {
 
   async receivePayment({permlink : last_permlink, buyer}){
     while (last_permlink){
-      last_permlink = await this.waitForActiveVote({author : this.username, permlink : last_permlink, nonce, voter : buyer})
+      last_permlink = await this.waitForActiveVote({author : this.username, permlink : last_permlink, voter : buyer})
       last_author = this.username
     }
   }
@@ -371,7 +408,7 @@ class SteemPay {
 
   async waitForActiveVote({author = this.username, permlink, voter}){
     do {
-      const votes = await this.hasActiveVotes({voter, author, permlink})
+      const votes = await this.getActiveVotes({voter, author, permlink})
       if (votes.length) return votes[0]
     } while(await wait(1000))
   }

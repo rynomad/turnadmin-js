@@ -9,7 +9,7 @@ const SteemPay = require('../steempay.js')
 const randString = () => crypto.randomBytes(32).toString('hex')
 
 describe('Steempay', function(){
-  this.timeout(20000)
+  this.timeout(10 * 60 * 1000)
   before(async () => {
     const keys = testdir.read('keys.json', 'json')
     if (!keys){
@@ -62,18 +62,9 @@ describe('Steempay', function(){
   })
 
   it('initializes', async () => {
-    try {
-      await this.user1.init()
-    } catch (e) {
-      console.error("USER 1 INIT ERROR")
-      console.log(e)
-    }
-    try {
-      await this.user2.init()
-    } catch (e) {
-      console.error("USER 2 INIT ERROR")
-      console.log(e)
-    }
+    
+    await this.user1.init()
+    await this.user2.init()
 
     const user1pub = await this.user2.getUserPublicKey(this.user1.username)
     const user2pub = await this.user1.getUserPublicKey(this.user2.username)
@@ -105,44 +96,53 @@ describe('Steempay', function(){
   })
 
   it('provides service', async () => {
-    const advertisement = await this.user1.postAdvertisement({body : "hello world service"})
-    console.log("POSTED ADVERTISEMENT")
+    try {
+      const advertisement = await this.user1.postAdvertisement({body : "hello world service"})
+      console.log("POSTED ADVERTISEMENT")
+  
+      this.user1.provideService({
+        advertisement,
+        provider : (request) => {
+          console.log("GOT PROVIDER REQUEST", request)
+        }
+      }).catch(e => {
+        console.log(e)
+      })
+  
+      console.log("PROVIDING SERVICE")
+  
+      const order_permlink = await this.user2.placeOrder({
+        author : this.user1.username,
+        advertisement
+      })
+  
+      console.log("PLACED ORDER", order_permlink)
+  
+      const invoice = await this.user2.receiveInvoice({
+        permlink : order_permlink,
+        seller : this.user1.username
+      })
+  
+      console.log("GOT INVOICE", invoice)
+  
+      await this.user2.payInvoice({
+        seller : this.user1.username,
+        invoice
+      })
+  
+      console.log("PAID INVOICE")
+  
+      const delivery = await this.user2.receiveDelivery({
+        seller : this.user1.username,
+        order : order_permlink
+      })
+  
+      console.log("GOT DELIVERY", delivery)
+    } catch (e){
+      console.log(e)
+      throw e
+    }
 
-    this.user1.provideService({
-      advertisement,
-      provider : (request) => {
-        console.log("GOT PROVIDER REQUEST", request)
-      }
-    })
-
-    console.log("PROVIDING SERVICE")
-
-    const order_permlink = await this.user2.placeOrder({
-      author : this.user1.username,
-      permlink
-    })
-
-    console.log("PLACED ORDER", order_permlink)
-
-    const invoice = await this.user2.receiveInvoice({
-      permlink : order_permlink
-    })
-
-    console.log("GOT INVOICE", invoice)
-
-    await this.user2.payInvoice({
-      seller : this.user1.username,
-      invoice
-    })
-
-    console.log("PAID INVOICE")
-
-    const delivery = await this.user2.receiveDelivery({
-      seller : this.user1.username,
-      order : order_permlink
-    })
-
-    console.log("GOT DELIVERY", delivery)
   })
 
 })
