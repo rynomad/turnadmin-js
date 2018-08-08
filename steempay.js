@@ -75,7 +75,7 @@ class Service {
     await this.postServiceDefinition()
   }
 
-  async updateSession({session_permlink, session_service_permlink, votables}){
+  updateSession({session_permlink, session_service_permlink, votables}){
     this.session_permlink = session_permlink
     this.session_service_permlink = session_service_permlink
     this.votables = votables
@@ -113,7 +113,7 @@ class Service {
       }))
     }
 
-    return {session_service_permlink, votables}
+    return {session_service_permlink, votables, permlink : this.permlink}
   }
 
   async waitStarted(ms){
@@ -211,9 +211,31 @@ class Client {
     return this._api
   }
 
+  setAccessToken(access_token){
+    this._api.setAccessToken(access_token)
+  }
+
+  async init(){
+    await this.post({
+      permlink : 'steempay-root',
+      title : "Root",
+      body : 'init'
+    })
+
+    await this.reply({
+      author : this.username,
+      permlink : 'steempay-root',
+      reply : {
+        permlink : 'steempay-deliveries',
+        title : 'Deliveries',
+        body : this._keypair.publicKey.toString('hex')
+      }
+    })
+  }
+
   async me(){
     return new Promise((resolve, reject) => {
-      this.api.me(sc2_cb('me')
+      this.api.me(sc2_cb('me'))
     })
   }
 
@@ -312,15 +334,9 @@ class Client {
   }
 
   async getUserPublicKey(user){
-
-    const root_post = await this.getPost({
-      author : user,
-      permlink : 'steempay-root'
-    })
-
     const post = await this.getPost({
       author : user,
-      permlink : root_post.body
+      permlink : 'steempay-deliveries'
     })
 
     const pubkey = Buffer.from(post.body, 'hex')
@@ -436,480 +452,179 @@ class Client {
   }
 }
 
-class SteemPay {
+
+class Bot extends Client{
   constructor({
-    sc2,
-    username,
-    keypair = nacl.box.keyPair()
+    app,
+    services = []
   }){
-    this._json = {
-      sc2,
-      username,
-      keypair
-    }
-    console.log("KEYPAIR", keypair)
-    this.username = username
+    super()
 
-    this._api = sc2_sdk.Initialize(sc2)
-    this._keypair = keypair
-    this._keypair.publicKey = Buffer.from(this._keypair.publicKey)
-    this._keypair.secretKey = Buffer.from(this._keypair.secretKey)
-  }
-
-  get api(){
-    if (!this._api.options.accessToken) {
-      console.error(this._api)
-      throw new Error('cannot use api without access token')
-    }
-    return this._api
+    this.services = services.map((service) => new Service(this, service.provider, service.config))
   }
 
   async init(){
+    await super.init()
+
     await this.newSession()
   }
 
-  async newSession(){
-    const root_permlink = 'steempay-root'
-    this._root_permlink = this._root_permlink || (await this.post({
-      permlink : 'steempay-root',
-      title : 'ROOT',
-      body  : 'INIT'
-    }))
-
-    const session = await this.reply({
-      author : this.username,
-      permlink : root_permlink,
-      reply : {
-        title : 'SESSION',
-        body : this._keypair.publicKey.toString('hex')
-      }
+  async waitStarted(ms){
+    return new Promise((resolve) => {
+      setTimeout(() => resolve(this.started), ms)
     })
-
-    this._session_permlink = await this.post({
-      permlink : root_permlink,
-      title : 'ROOT',
-      body : session
-    })
-  }
-
-  async getFollowers(){
-    return new Promise((resolve, reject) => {
-      steem.api.getFollowers(this.username, '', 'blog', 1000, (err, res) => {
-        if (err) return reject(err)
-        resolve(res.map(({follower}) => follower))
-      })
-    })
-  }
-
-  async getNewFollowers(){
-    this._followers = this._followers || new Set(await this.getFollowers())
-    const followers = await this.getFollowers()
-    const ret = followers.filter(follower => !this._followers.has(follower))
-    this._followers = new Set(followers)
-    return ret
-  }
-
-  transfer(recipient, qty, memo){
-    return this.api.sign('transfer',{
-      to : recipient,
-      amount : `${qty} STEEM`,
-      memo : `#${memo}`
-    }, 'http://localhost:4000')
   }
   
-  async me(){
-    return new Promise((resolve, reject) => {
-      this.api.me(sc2_cb('me', resolve, reject))
+  async waitStopping(ms){
+    return new Promise((resolve) => {
+      setTimeout(() => resolve(this.stopping), ms)
     })
   }
 
-  async vote(author, permlink, weight){
-    return new Promise((resolve, reject) => { 
-      this.api.vote(voter, author, permlink, weight, sc2_cb('vote', resolve, reject))
-    })  
-  } 
+  async start(){
+    this.started = true
 
-  async comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata){
-    return new Promise((resolve, reject) => {
-      this.api.comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata, (err,res) => err ? reject(err) : resolve(res))
-    })
-  }
-
-  async revokeToken(){
-    return new Promise((resolve, reject) => {
-      this.api.revokeToken(sc2_cb('op', resolve, reject))
-    })
-  }
-
-  async reblog(account, author, permlink){
-    return new Promise((resolve, reject) => {
-      this.api.reblog(account, author, permlink, sc2_cb('op', resolve, reject))
-    })
-  }
-
-  async follow(follower, following){
-    return new Promise((resolve, reject) => {
-      this.api.follow(follower, following, sc2_cb('op', resolve, reject))
-    })
-  }
-
-  async unfollow(unfollower, unfollowing) {
-    return new Promise((resolve, reject) => {
-      this.api.unfollow(unfollower, unfollowing, sc2_cb('op', resolve, reject))
-    })
-  }
-
-  async ignore(follower, following) {
-    return new Promise((resolve, reject) => {
-      this.api.ignore(follower, following, sc2_cb('op', resolve, reject))
-    })
-  }
-
-  async claimRewardBalance(account, rewardSteem, rewardSbd, rewardVests) {
-    return new Promise((resolve, reject) => {
-      this.api.claimRewardBalance(account, rewardSteem, rewardSbd, rewardVests, sc2_cb('op', resolve, reject))
-    })
-  }
-
-  async updateUserMetadata(metadata){
-    return new Promise((resolve, reject) => {
-      this.api.updateUserMetadata(metadata, (err,res) => err ? reject(err) : resolve(res))
-    })
-  }
-
-  async post({permlink = crypto.randomBytes(32).toString('hex'), title, body, meta}){
-    console.log(permlink, title, body, meta)
-    try {
-      await this.comment('', this.username, this.username, permlink, title, body, meta || null)
-    } catch (e) {
-      console.warn(e)
-      if (e.error_description.indexOf('STEEM_MIN_ROOT_COMMENT_INTERVAL') >= 0){
-        console.log("waiting 5 min 5 sec to retry")
-        await wait( 5 * 60 * 1000 + 5000)
-        return this.post({permlink, title, body, meta})
-      }
+    for (let service of this.services){
+      service.start().catch((e) => {
+        console.log("service error")
+        console.error(e)
+      })
     }
-    return permlink
+
+    do {
+      await this.newSession()
+    } while (await this.waitStarted(1000))
+
+    this.stopping = false
   }
 
-  async reply({author, permlink, reply : {permlink : reply_permlink, title = 'reply', body = 'body', meta}}){
-    try {
-      reply_permlink = reply_permlink || crypto.randomBytes(32).toString('hex')
-      await this.comment(author, permlink, this.username, reply_permlink, title, body, meta || null)
-      return reply_permlink
-    } catch (e) {
-      console.warn(e)
-      if (e.error_description.indexOf('STEEM_MIN_REPLY_INTERVAL') >= 0){
-        console.log("waiting 22 seconds to retry")
-        await wait(22 * 1000)
-        return this.reply({author, permlink, reply : {permlink : reply_permlink, title, body, meta}})
+  async stop(){
+    this.started = false
+    tbis.stopping = true
+
+    for (let service of this.services){
+      await service.stop()
+    }
+
+    while (await this.waitStopping(1000)){}
+  }
+
+  async newSession(){
+    await this.reply({
+      author : this.username,
+      permlink : 'steempay-root',
+      reply : {
+        permlink : 'steempay-sessions',
+        title : "Sessions",
+        body : "sessions"
       }
+    })
+
+    const session_permlink = await this.reply({
+      author : this.username,
+      permlink : 'steempay-sessions',
+      reply : {
+        title : 'Session',
+        body : 'session'
+      }
+    })
+
+    const services = new Map()
+
+    for (let service of this.servisces){
+      const {session_service_permlink, votables} = await service.prepareSession(session_permlink)
+      services.set(service.permlink, {session_service_permlink, votables})
+    }
+
+    await this.post({
+      permlink : 'steempay-root',
+      title : 'Root',
+      body : session_permlink
+    })
+
+    for (let service of this.services){
+      const {session_service_permlink, votables} = services.get(service.permlink)
+      service.updateSession({
+        session_permlink,
+        session_service_permlink,
+        votables
+      })
     }
   }
 
-  async getPost({author, permlink}){
+  async consumeToken({access_token, refresh_token, expires_in, username}){
+    if (access_token && (username === this._json.username) && expires_in && refresh_token){
+      this._json.sc2.access_token = access_token
+      this._json.sc2.expires_at = Date.now() + (expires_in * 1000)
+      this._json.sc2.refresh_token = refresh_token
+      this._api.setAccessToken(access_token)
+      return true
+    }
+
+    return false
+  }
+
+  async refreshToken(){
+    console.log("requesting refresh", this.refresh_token)
     return new Promise((resolve, reject) => {
-      steem.api.getContent(author, permlink, sc2_cb('getPost', resolve, reject));
-    })
-  }
-
-  async getUserPublicKey(user){
-
-    const root_post = await this.getPost({
-      author : user,
-      permlink : 'steempay-root'
-    })
-
-    const post = await this.getPost({
-      author : user,
-      permlink : root_post.body
-    })
-
-    const pubkey = Buffer.from(post.body, 'hex')
-    //this._pubkeys.set(user, pubkey)
-    return pubkey
-  }
-
-
-
-  async getReplies({author = this.username, permlink, commentor, title , reply_permlink}){
-    return new Promise((resolve, reject) => 
-      steem.api.getContentReplies(author, permlink, (err, res) => 
-        err ? reject(err) : resolve(res.filter(
-          ({title : _title, author : _commentor, permlink : _reply_permlink}) => 
-            (!commentor || (commentor === _commentor)) && (!title || (title === _title) && (!reply_permlink || (reply_permlink === _reply_permlink)))
-          )
-        )
+      request.get(
+        `https://steemconnect.com/api/oauth2/token?refresh_token=${this._json.sc2.refresh_token}&grant_type=refresh_token&client_secret=${this._json.sc2.secret}`,
+        (err, res, body) => {
+          if (err) return reject(err)
+          if (!this.consumeToken(JSON.parse(body))) return reject(body)
+          resolve()
+        }
       )
-    )
-  }
-
-  async replyEncrypted({author, permlink, pubkeyhex, reply : {title, body}}) {
-    let pubkey
-    try {
-      pubkey = Buffer.from(pubkeyhex, 'hex')
-    } catch (e){
-      pubkey = await this.getUserPublicKey(author)
-    }
-    console.log(pubkey, pubkey.size, pubkey)
-    const nonce = crypto.randomBytes(24)
-    console.log("ENCRYPT NONCE", nonce.toString('hex'))
-    const box = Buffer.from(nacl.box(
-      bufToUint(Buffer.from(body)), 
-      bufToUint(nonce), 
-      bufToUint(pubkey), 
-      bufToUint(this._keypair.secretKey)
-    )).toString('hex')
-
-    const reply_permlink = nonce.toString('hex')
-    await this.reply({
-      author, 
-      permlink, 
-      reply : {
-        permlink : reply_permlink, 
-        title, 
-        body : box, 
-        meta : {"encrypted" : pubkey.toString('hex')}
-      }
-    })
-    return reply_permlink
-  }
-
-  async getEncryptedReplies({permlink, commentor, title, reply_permlink}){
-    const replies = (await this.getReplies({permlink, commentor, title, reply_permlink})).filter(({json_metadata}) => {
-      const meta = JSON.parse(json_metadata)
-
-      console.log("meta", meta,this._keypair.publicKey.toString('hex'))
-      return (meta.encrypted === this._keypair.publicKey.toString('hex'))
-    })
-
-    const decrypted = []
-    for(let reply of replies){
-      const {author, permlink, body} = reply
-      const decrypted_body = await this.decryptReply({author, permlink, body})
-
-      decrypted.push({...reply, body : decrypted_body})
-    }
-
-    console.log(decrypted)
-    return decrypted
-  }
-
-  async decryptReply({author, permlink, body}){
-    const box = bufToUint(Buffer.from(body, 'hex'))
-    const nonce = bufToUint(Buffer.from(permlink, 'hex'))
-    const pubkey = bufToUint((await this.getUserPublicKey(author)))
-    console.log("DECRYPT NONCE",permlink)
-    return Buffer.from(nacl.box.open(box, nonce, pubkey, bufToUint(this._keypair.secretKey) )).toString()
-  }
-
-  async placeOrder({seller : author, permlink}){
-    const advertisement = await this.getPost({
-      author,
-      permlink
-    })
-    console.log(advertisement)
-    const votables = JSON.parse(advertisement.json_metadata || '[]')
-    console.log(votables, votables.length)
-
-    await Promise.all(votables.map((permlink) => this.vote(this.username, author, permlink, 10000)))
-
-    return this.reply({
-      author,
-      permlink,
-      reply : {
-        title : 'ORDER',
-        body : this._keypair.publicKey.toString('hex')
-      }
     })
   }
 
-  async receiveDelivery({seller, order}){
-    do {
-      const deliveries = await this.getEncryptedReplies({
-        author : this.username,
-        permlink : 'steempay-deliveries',
-        commentor : seller,
-        title : 'DELIVERY',
-        reply_permlink : `delivery-${order}`
-      })
-      if (deliveries.length) return deliveries[0]
-    } while(await wait(1000))
-  }
-
-  async provideService({advertisement, provider, cost}){
-    const seen = new Set()
-    
-    do {
-      const new_orders = await this.receiveOrders({advertisement})
-      for (let order of new_orders){
-        console.log('fulfill order',order )
-        this.fulfillOrder({order, provider, cost}).catch(e => {
-          console.error(e)
-        })
-      }
-    } while(await wait(1000)) 
-  }
-
-  async postAdvertisement({permlink = crypto.randomBytes(32).toString('hex'), terms = {}, cost = 1} = {}){
-    await this.reply({
-      author : this.username,
-      permlink : this._session_permlink,
-      reply : {
-        permlink,
-        title : 'ADVERTISEMENT',
-        body : JSON.stringify(terms)
-      }
+  async requestToken(){
+    console.log("requesting token ", this._json.code, this._json.secret)
+    return new Promise((resolve, reject) => {
+      request.get(
+        `https://steemconnect.com/api/oauth2/token?code=${this._json.sc2.code}&client_secret=${this._json.sc2.secret}`,
+        (err,res, body) => {
+          if (err) return reject(err)
+          if (!this.consumeToken(JSON.parse(body))) return reject(body)
+          resolve()
+        }
+      )
     })
+  }
 
-    let last_permlink = permlink
-    const votables = [last_permlink]
-
-    for (let i = 1; i < cost; i++){
-      last_permlink = await this.reply({
-        author : this.username,
-        permlink : last_permlink,
-        reply : {
-          title : 'VOTABLE',
-          body : 'votable'
+  async listenForCode(){
+    return new Promise((resolve, reject) => {
+      this.server = https.createServer({
+        cert : fs.readFileSync(this._json.certfile),
+        key : fs.readFileSync(this._json.keyfile)
+      },(request, response) => {
+        const {query : {code}} = url.parse(request.url, true)
+        console.log('got query', code)
+        if (code) {
+          this._json.code = code
+          this.emit('update')
+          response.statusCode = 200
+          response.end(() => {
+            this.server.close(() => {
+              resolve()
+            })
+          })
+        } else {
+          response.statusCode = 500
+          response.statusMessage = "Bad Request"
+          response.end()
         }
       })
-      votables.push(last_permlink)
-    }
 
-    await this.reply({
-      author : this.username,
-      permlink : this._session_permlink,
-      reply : {
-        permlink,
-        title : 'ADVERTISEMENT',
-        body : JSON.stringify(terms),
-        meta : votables
-      }
-    })
-
-    return {permlink, votables}
-  }
-
-  async getNewPaidOrders({permlink, votables}){
-    const replies = await this.getReplies({
-      author : this.username,
-      permlink : permlink,
-      title : 'ORDER'
-    })
-
-    let new_orders = []
-    for (let {permlink, author, body} of replies){
-      const votes = await this.getActiveVotes({
-        author,
-        permlink,
-        voter : this.username
-      })
-      if (!votes.length){
-        new_orders.push({permlink, author, body})
-      }
-    }
-
-    let paid_orders = []
-    for (let {permlink, author, body} of new_orders){
-      const votes = await Promise.all(votables.map((permlink) => this.getActiveVotes({
-        author : this.username,
-        permlink,
-        voter : author
-      })))
-
-      const paid = votes.reduce((_paid, _votes) => _paid && _votes.length , true)
-      
-      if (paid){
-        paid_orders.push({permlink, author, body})
-      }
-    }
-
-    for (let {permlink, author} of paid_orders){
-      await this.vote(this.username, author, permlink, 10000)
-    }
-    
-    return paid_orders
-  }
-
-  async fulfillOrder({order : {author, permlink, body}, payload}){
-    await this.replyEncrypted({
-      author,
-      permlink,
-      pubkeyhex : body,
-      reply : {
-        title : 'DELIVERY',
-        body : payload
-      }
-    })
-  }
-
-
-  async postInvoice({author : last_author, order, quantity = 1}){
-    let last_permlink = order
-    let head;
-
-    for (let i = 0; i < quantity; i++){
-      console.log('post invoice reply', last_author, last_permlink, order,)
-      last_permlink = await this.reply({
-        author : last_author,
-        permlink : last_permlink,
-        reply : {
-          title : 'INVOICE',
-          body : order,
-          meta : (i === (quantity - 1)) ? {"end":true} : null
-        }
-      })
-      last_author = this.username
-      head = head || last_permlink
-    }
-
-    return head
-  }
-
-  async getNextInvoiceComment({author, permlink}){
-    const comments = await this.getReplies({author, permlink, commentor : author, title : "INVOICE"})
-    return comments[0] ? comments[0].permlink : null
-  }
-
-  async receivePayment({permlink, buyer}){
-    while (permlink){
-      console.log("receive payment", permlink)
-      await this.waitForActiveVote({permlink, voter : buyer})
-      permlink = await this.getNextInvoiceComment({author : this.username, permlink})
-    }
-  }
-
-  async waitForActiveVote({permlink, voter}){
-    do {
-      const votes = await this.getActiveVotes({voter, permlink})
-      if (votes.length) return votes[0]
-    } while(await wait(1000))
-  }
-
-  async getActiveVotes({author = this.username, voter, permlink}){
-    return new Promise((resolve,reject) => {
-      steem.api.getActiveVotes(author, permlink, (err, res) => {
-        if (err) return reject(err)
-        const votes = []
-        for (let vote of res){
-          if (!voter || (voter === vote.voter)) votes.push(vote)
-        }
-        resolve(votes)
-      })
-    })
-  }
-
-  async sendDelivery({order, buyer, payload}){
-    await this.replyEncrypted({
-      author : buyer,
-      permlink : order,
-      reply : {
-        title : 'DELIVERY',
-        body : payload
-      }
+      this.server.on('error', reject)
+      this.server.listen(this._json.port || 4443)
     })
   }
 }
 
-module.exports = SteemPay
+module.exports = {
+  Client,
+  Service,
+  Bot
+}
+
