@@ -3,6 +3,7 @@ const crypto = require('crypto')
 const nacl = require('tweetnacl')
 const sc2_sdk = require('sc2-sdk')
 const steem = require('steem')
+const STEEMPAY_DELIVERIES_PERMLINK = 'steempay-deliveries'
 
 function bufToUint(buf){
   const uint = new Uint8Array(buf.byteLength)
@@ -12,10 +13,11 @@ function bufToUint(buf){
   return uint
 }
 
-const sc2_cb = (op, resolve, reject) => (err, res) => {
+const sc2_cb = (op, resolve, reject, invalid_json_cb) => (err, res) => {
   if (err) {
     console.warn(`SC2 ERROR: ${op}`)
     console.warn(err)
+    if (err.type === "invalid-json" && invalid_json_cb) return invalid_json_cb().then(resolve).catch(reject)
     return reject(err)
   }
   resolve(res)
@@ -28,11 +30,11 @@ class Service {
     bot,
     provider = (username) => username,
     {
-      title = 'Steem Echo Service',
-      description = 'sends your username back to you',
+      title = 'Echo',
+      description = 'echo_service',
       tags = [],
       terms = { cost : 1},
-      permlink = crypto.randomBytes(24).toString('hex')
+      permlink = crypto.randomBytes(16).toString('hex')
     }
   ) {
     this.bot = bot,
@@ -65,6 +67,7 @@ class Service {
 
   get service_definition(){
     return {
+      permlink : this.permlink,
       title : this.title,
       body : this.description,
       meta : this.meta
@@ -83,29 +86,43 @@ class Service {
   }
 
   async postServiceDefinition(){
-    await this.postReply({
-      author : this.bot.username,
-      permlink : 'steempay-services',
-      reply : this.service_definition
-    })
+    console.log("postServiceDefinition", this.service_definition)
+    try {
+      this.permlink = await this.bot.reply({
+        author : this.bot.username,
+        permlink : 'steempay-services',
+        reply : this.service_definition
+      })
+    } catch (e){
+      console.error(e)
+      throw e
+    }
+
+    console.log("service_permlink", this.permlink)
   }
 
   async prepareSession(session_permlink){
-    const session_service_permlink = await this.bot.postReply({
+    const session_service_permlink = `${session_permlink}-${this.permlink}`
+    console.log("service.prepareSession", session_permlink)
+    
+    await this.bot.reply({
       author : this.bot.username,
       permlink : session_permlink,
       reply : {
+        permlink : session_service_permlink,
         title : this.permlink,
         body : this.permlink
       }
     })
 
+    console.log("SESSION_SERV_PERM", session_service_permlink)
+
     const votables = []
 
     for (let i = 0; i < this.terms.cost; i++){
-      votables.push(await this.bot.postReply({
+      votables.push(await this.bot.reply({
         author : this.bot.username,
-        permlink : this.session_permlink,
+        permlink : session_service_permlink,
         reply : {
           title : this.permlink,
           body : this.permlink
@@ -133,7 +150,9 @@ class Service {
 
     do {
       const orders = await this.getNewPaidOrders()
+      console.log("got orders", orders)
       for (let buyer of orders){
+        console.log("fulfill order", buyer)
         this.fulfillOrder(buyer)
       }
     } while(await this.waitStarted(1000))
@@ -148,21 +167,24 @@ class Service {
   }
 
   async getNewPaidOrders(){
-    const new_orders = (await this.getActiveVotes({
+    console.log("get new paid orders", this.session_service_permlink)
+    const votes = await this.getActiveVotes({
       author : this.bot.username,
       permlink : this.session_service_permlink
-    })).map(({voter}) => voter).filter(voter => this.orders.has(voter))
-
+    })
+    const new_orders = votes.map(({voter}) => voter).filter(voter => !this.orders.has(voter))
+    console.log("orders", new_orders)
     let paid_orders = []
 
     for (let voter of new_orders){
-      const paid = await Promise.all(this.votables.map((permlink) => this.getActiveVotes({
-        author : this.username,
+      const paid = (await Promise.all(this.votables.map((permlink) => this.getActiveVotes({
+        author : this.bot.username,
         permlink,
         voter
-      }))).reduce((_paid, _votes) => _paid && _votes.length, true)
+      })))).reduce((_paid, _votes) => _paid && _votes.length, true)
       
       if (paid){
+        this.orders.add(voter)
         paid_orders.push(voter)
       }
     }
@@ -170,12 +192,23 @@ class Service {
     return paid_orders
   }
 
+  async getActiveVotes({author, permlink, voter}){
+    return new Promise((resolve, reject) => {
+      steem.api.getActiveVotes(author, permlink, (err, res) => {
+        if (err){
+          return reject(err)
+        }
+        resolve(res.filter(({voter: _voter}) => !voter || (voter === _voter)))
+      })
+    })
+  }
+
   async fulfillOrder(buyer){
     return this.bot.replyEncrypted({
       author : buyer,
-      permlink : 'steempay-delivieries',
+      permlink : STEEMPAY_DELIVERIES_PERMLINK,
       reply : {
-        permlink : `delivery-${this.session_service_permlink}`,
+        title : `DELIVERY-${this.session_service_permlink}`,
         body : await this.provider(buyer)
       }
     })
@@ -194,13 +227,15 @@ class Client {
       username,
       keypair
     }
-    console.log("KEYPAIR", keypair)
     this.username = username
 
     this._api = sc2_sdk.Initialize(sc2)
-    this._keypair = keypair
-    this._keypair.publicKey = Buffer.from(this._keypair.publicKey)
-    this._keypair.secretKey = Buffer.from(this._keypair.secretKey)
+    this._keypair = {
+      publicKey : Buffer.from(keypair.publicKey),
+      secretKey : Buffer.from(keypair.secretKey)
+    }
+
+    this.fifo = []
   }
 
   get api(){
@@ -216,19 +251,33 @@ class Client {
   }
 
   async init(){
+    console.log("post client root")
     await this.post({
       permlink : 'steempay-root',
       title : "Root",
       body : 'init'
     })
 
+    console.log("post client deliveries")
     await this.reply({
       author : this.username,
       permlink : 'steempay-root',
       reply : {
-        permlink : 'steempay-deliveries',
+        permlink : STEEMPAY_DELIVERIES_PERMLINK,
         title : 'Deliveries',
         body : this._keypair.publicKey.toString('hex')
+      }
+    })
+
+
+    console.log("post client services")
+    await this.reply({
+      author : this.username,
+      permlink : 'steempay-root',
+      reply : {
+        permlink : 'steempay-services',
+        title : 'Services',
+        body : 'services'
       }
     })
   }
@@ -241,13 +290,60 @@ class Client {
 
   async vote(voter, author, permlink, weight){
     return new Promise((resolve, reject) => { 
-      this.api.vote(voter, author, permlink, weight, sc2_cb('vote', resolve, reject))
+      console.log("vote", voter, author, permlink, weight)
+      this.api.vote(voter, author, permlink, weight, sc2_cb('vote', resolve, reject, () => this.vote(voter, author, permlink, weight)))
     })  
-  } 
+  }
+
+  async __comment({parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata}){
+    return new Promise((resolve, reject) => {
+      console.log("__comment", author, permlink)
+      this.api.comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata, 
+        sc2_cb('comment', resolve, reject, (err) => this.comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata))
+      )
+    })
+  }
+
+  async _comment(){
+    if (this._commenting) return
+    this._commenting = true
+    while (this.fifo.length){
+      const job = this.fifo.shift()
+      console.log("exec comment job", job)
+      try {
+        job.promise.resolve(await this.__comment(job.args))
+      } catch (e){
+        if (e.error_description && ((e.error_description.indexOf('STEEM_MIN_ROOT_COMMENT_INTERVAL') >= 0) || (e.error_description.indexOf('STEEM_MIN_REPLY_INTERVAL') >= 0 ))){
+          console.log("rate limit, retry")
+          this.fifo.unshift(job)
+        } else {
+          job.promise.reject(e)
+        } 
+
+      }
+      await wait(1000)
+    } 
+    this._commenting = false
+  }
 
   async comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata){
     return new Promise((resolve, reject) => {
-      this.api.comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata, sc2_cb('comment', resolve, reject))
+      this.fifo.push({
+        promise : {
+          resolve,
+          reject
+        },
+        args : {
+          parentAuthor,
+          parentPermlink,
+          author,
+          permlink, 
+          title,
+          body,
+          jsonMetadata
+        }
+      })
+      this._comment()
     })
   }
 
@@ -293,12 +389,12 @@ class Client {
     })
   }
 
-  async post({permlink = crypto.randomBytes(32).toString('hex'), title, body, meta}){
+  async post({permlink = crypto.randomBytes(16).toString('hex'), title, body, meta}){
     console.log(permlink, title, body, meta)
     try {
       await this.comment('', this.username, this.username, permlink, title, body, meta || null)
     } catch (e) {
-      console.warn(e)
+      if (e.name === 'FetchError') return this.post({permlink, title, body, meta})
       if (e.error_description.indexOf('STEEM_MIN_ROOT_COMMENT_INTERVAL') >= 0){
         console.log("waiting 5 min 5 sec to retry")
         await wait( 5 * 60 * 1000 + 5000)
@@ -312,11 +408,12 @@ class Client {
 
   async reply({author, permlink, reply : {permlink : reply_permlink, title = 'reply', body = 'body', meta}}){
     try {
-      reply_permlink = reply_permlink || crypto.randomBytes(32).toString('hex')
+      reply_permlink = reply_permlink || crypto.randomBytes(16).toString('hex')
+      console.log("REPLY COMMENT ARGS", author, permlink, this.username, reply_permlink, title, body, meta)
       await this.comment(author, permlink, this.username, reply_permlink, title, body, meta || null)
       return reply_permlink
     } catch (e) {
-      console.warn(e)
+      if (e.name === 'FetchError') return this.reply({author, permlink, reply : {permlink : reply_permlink, title, body, meta}})
       if (e.error_description.indexOf('STEEM_MIN_REPLY_INTERVAL') >= 0){
         console.log("waiting 22 seconds to retry")
         await wait(22 * 1000)
@@ -336,7 +433,7 @@ class Client {
   async getUserPublicKey(user){
     const post = await this.getPost({
       author : user,
-      permlink : 'steempay-deliveries'
+      permlink : STEEMPAY_DELIVERIES_PERMLINK
     })
 
     const pubkey = Buffer.from(post.body, 'hex')
@@ -358,7 +455,7 @@ class Client {
     )
   }
 
-  async replyEncrypted({author, permlink, pubkeyhex, reply : {title, body}}) {
+  async replyEncrypted({author, permlink, pubkeyhex, reply : {permlink : reply_permlink, title, body}}) {
     let pubkey
     try {
       pubkey = Buffer.from(pubkeyhex, 'hex')
@@ -375,7 +472,8 @@ class Client {
       bufToUint(this._keypair.secretKey)
     )).toString('hex')
 
-    const reply_permlink = nonce.toString('hex')
+    console.log("ENCRYPTED")
+    console.log("REPLY", author, permlink, reply_permlink, title, box)
     await this.reply({
       author, 
       permlink, 
@@ -383,14 +481,17 @@ class Client {
         permlink : reply_permlink, 
         title, 
         body : box, 
-        meta : {"encrypted" : pubkey.toString('hex')}
+        meta : {"encrypted" : pubkey.toString('hex'), "nonce" : nonce.toString('hex')}
       }
     })
+    console.log("REPLIED", reply_permlink)
     return reply_permlink
   }
 
   async getEncryptedReplies({permlink, commentor, title}){
+    console.log("getEncryptedReplies", permlink, commentor, title)
     const replies = (await this.getReplies({permlink, commentor, title})).filter(({json_metadata}) => {
+      console.log("FILTER", json_metadata)
       const meta = JSON.parse(json_metadata)
 
       console.log("meta", meta,this._keypair.publicKey.toString('hex'))
@@ -399,7 +500,8 @@ class Client {
 
     const decrypted = []
     for(let reply of replies){
-      const {author, permlink, body} = reply
+      const {author, permlink, body, json_metadata} = reply
+      const nonce = JSON.parse(json_metadata).nonce
       const decrypted_body = await this.decryptBody({author, permlink, body})
 
       decrypted.push({...reply, body : decrypted_body})
@@ -409,9 +511,9 @@ class Client {
     return decrypted
   }
 
-  async decryptBody({author, permlink, body}){
+  async decryptBody({author, permlink, body, nonce}){
     const box = bufToUint(Buffer.from(body, 'hex'))
-    const nonce = bufToUint(Buffer.from(permlink, 'hex'))
+    nonce = bufToUint(Buffer.from(nonce, 'hex'))
     const pubkey = bufToUint((await this.getUserPublicKey(author)))
     console.log("DECRYPT NONCE",permlink)
     return Buffer.from(nacl.box.open(box, nonce, pubkey, bufToUint(this._keypair.secretKey) )).toString()
@@ -435,18 +537,20 @@ class Client {
 
     await this.vote(this.username, author, session_service_permlink, 10000)
 
-    return session_service_permlinks
+    return session_service_permlink
   }
 
   async receiveDelivery({seller, order}){
     do {
+      console.log("receiveDelivery", seller, order)
       const deliveries = await this.getEncryptedReplies({
         author : this.username,
-        permlink : 'steempay-deliveries',
-        reply_permlink : `delivery-${session_service_permlink}`,
+        permlink : STEEMPAY_DELIVERIES_PERMLINK,
+        reply_permlink : `delivery-${order}`,
         commentor : seller,
-        title : 'DELIVERY'
+        title : `DELIVERY-${order}`
       })
+      console.log("deliveries, deliveries", deliveries)
       if (deliveries.length) return deliveries[0]
     } while(await wait(1000))
   }
@@ -454,19 +558,23 @@ class Client {
 
 
 class Bot extends Client{
-  constructor({
-    app,
-    services = []
-  }){
-    super()
+  constructor(
+    options
+  ){
+    super(options)
 
-    this.services = services.map((service) => new Service(this, service.provider, service.config))
+    this.services = options.services.map((service) => new Service(this, service.provider, service.config))
   }
 
   async init(){
     await super.init()
 
+    for (let service of this.services){
+      await service.init()
+    }
+
     await this.newSession()
+
   }
 
   async waitStarted(ms){
@@ -491,16 +599,18 @@ class Bot extends Client{
       })
     }
 
+
     do {
+      console.log("REDO SESSION", this.started, this.stopping)
       await this.newSession()
-    } while (await this.waitStarted(1000))
+    } while (await this.waitStarted(60 * 60 * 1000))
 
     this.stopping = false
   }
 
   async stop(){
     this.started = false
-    tbis.stopping = true
+    this.stopping = true
 
     for (let service of this.services){
       await service.stop()
@@ -510,6 +620,7 @@ class Bot extends Client{
   }
 
   async newSession(){
+    console.log("new session, prev:", this.session_permlink)
     await this.reply({
       author : this.username,
       permlink : 'steempay-root',
@@ -529,21 +640,28 @@ class Bot extends Client{
       }
     })
 
+    console.log("new session permlink:", session_permlink)
+
     const services = new Map()
 
-    for (let service of this.servisces){
+    for (let service of this.services){
+      console.log("service preparing new permlink", service.permlink)
       const {session_service_permlink, votables} = await service.prepareSession(session_permlink)
+      console.log("prepared at", session_service_permlink, votables)
       services.set(service.permlink, {session_service_permlink, votables})
     }
 
+    console.log('update root body to point to session_permlink', session_permlink)
     await this.post({
       permlink : 'steempay-root',
       title : 'Root',
       body : session_permlink
     })
 
+
     for (let service of this.services){
       const {session_service_permlink, votables} = services.get(service.permlink)
+      console.log('update session', session_permlink, session_service_permlink, votables)
       service.updateSession({
         session_permlink,
         session_service_permlink,
