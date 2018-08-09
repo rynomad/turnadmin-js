@@ -15,8 +15,6 @@ function bufToUint(buf){
 
 const sc2_cb = (op, resolve, reject, invalid_json_cb) => (err, res) => {
   if (err) {
-    console.warn(`SC2 ERROR: ${op}`)
-    console.warn(err)
     if (err.type === "invalid-json" && invalid_json_cb) return invalid_json_cb().then(resolve).catch(reject)
     return reject(err)
   }
@@ -150,9 +148,8 @@ class Service {
 
     do {
       const orders = await this.getNewPaidOrders()
-      console.log("got orders", orders)
       for (let buyer of orders){
-        console.log("fulfill order", buyer)
+        console.log("fulfill order from", buyer)
         this.fulfillOrder(buyer)
       }
     } while(await this.waitStarted(1000))
@@ -167,13 +164,12 @@ class Service {
   }
 
   async getNewPaidOrders(){
-    console.log("get new paid orders", this.session_service_permlink)
     const votes = await this.getActiveVotes({
       author : this.bot.username,
       permlink : this.session_service_permlink
     })
     const new_orders = votes.map(({voter}) => voter).filter(voter => !this.orders.has(voter))
-    console.log("orders", new_orders)
+
     let paid_orders = []
 
     for (let voter of new_orders){
@@ -205,6 +201,7 @@ class Service {
 
   async fulfillOrder(buyer){
     return this.bot.replyEncrypted({
+      priority : true,
       author : buyer,
       permlink : STEEMPAY_DELIVERIES_PERMLINK,
       reply : {
@@ -297,9 +294,8 @@ class Client {
 
   async __comment({parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata}){
     return new Promise((resolve, reject) => {
-      console.log("__comment", author, permlink)
       this.api.comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata, 
-        sc2_cb('comment', resolve, reject, (err) => this.comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata))
+        sc2_cb('comment', resolve, reject, (err) => this.__comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata))
       )
     })
   }
@@ -309,12 +305,12 @@ class Client {
     this._commenting = true
     while (this.fifo.length){
       const job = this.fifo.shift()
-      console.log("exec comment job", job)
+      process.stdout.write('>')
       try {
         job.promise.resolve(await this.__comment(job.args))
       } catch (e){
         if (e.error_description && ((e.error_description.indexOf('STEEM_MIN_ROOT_COMMENT_INTERVAL') >= 0) || (e.error_description.indexOf('STEEM_MIN_REPLY_INTERVAL') >= 0 ))){
-          console.log("rate limit, retry")
+          process.stdout.write('.')
           this.fifo.unshift(job)
         } else {
           job.promise.reject(e)
@@ -326,9 +322,11 @@ class Client {
     this._commenting = false
   }
 
-  async comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata){
+  async comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata, priority){
     return new Promise((resolve, reject) => {
-      this.fifo.push({
+      console.log("comment into fifo", parentAuthor, parentPermlink, author, permlink, title)
+      let fifo_op = priority ? 'unshift' : 'push'
+      this.fifo[fifo_op]({
         promise : {
           resolve,
           reject
@@ -406,22 +404,10 @@ class Client {
     return permlink
   }
 
-  async reply({author, permlink, reply : {permlink : reply_permlink, title = 'reply', body = 'body', meta}}){
-    try {
-      reply_permlink = reply_permlink || crypto.randomBytes(16).toString('hex')
-      console.log("REPLY COMMENT ARGS", author, permlink, this.username, reply_permlink, title, body, meta)
-      await this.comment(author, permlink, this.username, reply_permlink, title, body, meta || null)
-      return reply_permlink
-    } catch (e) {
-      if (e.name === 'FetchError') return this.reply({author, permlink, reply : {permlink : reply_permlink, title, body, meta}})
-      if (e.error_description.indexOf('STEEM_MIN_REPLY_INTERVAL') >= 0){
-        console.log("waiting 22 seconds to retry")
-        await wait(22 * 1000)
-        return this.reply({author, permlink, reply : {permlink : reply_permlink, title, body, meta}})
-      } else {
-        throw e
-      }
-    }
+  async reply({priority, author, permlink, reply : {permlink : reply_permlink, title = 'reply', body = 'body', meta}}){
+    reply_permlink = reply_permlink || crypto.randomBytes(16).toString('hex')
+    await this.comment(author, permlink, this.username, reply_permlink, title, body, meta || null, priority)
+    return reply_permlink
   }
 
   async getPost({author, permlink}){
@@ -455,16 +441,15 @@ class Client {
     )
   }
 
-  async replyEncrypted({author, permlink, pubkeyhex, reply : {permlink : reply_permlink, title, body}}) {
+  async replyEncrypted({priority = false, author, permlink, pubkeyhex, reply : {permlink : reply_permlink, title, body}}) {
     let pubkey
     try {
       pubkey = Buffer.from(pubkeyhex, 'hex')
     } catch (e){
       pubkey = await this.getUserPublicKey(author)
     }
-    console.log(pubkey, pubkey.size, pubkey)
+
     const nonce = crypto.randomBytes(24)
-    console.log("ENCRYPT NONCE", nonce.toString('hex'))
     const box = Buffer.from(nacl.box(
       bufToUint(Buffer.from(body)), 
       bufToUint(nonce), 
@@ -472,36 +457,35 @@ class Client {
       bufToUint(this._keypair.secretKey)
     )).toString('hex')
 
-    console.log("ENCRYPTED")
-    console.log("REPLY", author, permlink, reply_permlink, title, box)
+    console.log("ENCRYPTED REPLY", author, permlink, title, nonce, box)
     await this.reply({
+      priority, 
       author, 
       permlink, 
       reply : {
-        permlink : reply_permlink, 
+        permlink : nonce.toString('hex'), 
         title, 
         body : box, 
         meta : {"encrypted" : pubkey.toString('hex'), "nonce" : nonce.toString('hex')}
       }
     })
-    console.log("REPLIED", reply_permlink)
     return reply_permlink
   }
 
   async getEncryptedReplies({permlink, commentor, title}){
-    console.log("getEncryptedReplies", permlink, commentor, title)
     const replies = (await this.getReplies({permlink, commentor, title})).filter(({json_metadata}) => {
       console.log("FILTER", json_metadata)
       const meta = JSON.parse(json_metadata)
 
-      console.log("meta", meta,this._keypair.publicKey.toString('hex'))
+      console.log("meta", meta, this._keypair.publicKey.toString('hex'), (meta.encrypted === this._keypair.publicKey.toString('hex')))
       return (meta.encrypted === this._keypair.publicKey.toString('hex'))
     })
 
+    if (!replies.length) return []
+    console.log("got encrypted replies")
     const decrypted = []
     for(let reply of replies){
-      const {author, permlink, body, json_metadata} = reply
-      const nonce = JSON.parse(json_metadata).nonce
+      const {author, permlink, body} = reply
       const decrypted_body = await this.decryptBody({author, permlink, body})
 
       decrypted.push({...reply, body : decrypted_body})
@@ -511,12 +495,16 @@ class Client {
     return decrypted
   }
 
-  async decryptBody({author, permlink, body, nonce}){
+  async decryptBody({author, permlink, body}){
+    console.log("decryptBody")
     const box = bufToUint(Buffer.from(body, 'hex'))
-    nonce = bufToUint(Buffer.from(nonce, 'hex'))
+    const nonce = bufToUint(Buffer.from(permlink, 'hex'))
     const pubkey = bufToUint((await this.getUserPublicKey(author)))
-    console.log("DECRYPT NONCE",permlink)
-    return Buffer.from(nacl.box.open(box, nonce, pubkey, bufToUint(this._keypair.secretKey) )).toString()
+    console.log("got uints")
+    const decrypted = Buffer.from(nacl.box.open(box, nonce, pubkey, bufToUint(this._keypair.secretKey) ))
+    console.log("decrypted", decrypted)
+    
+    return Buffer.from(decrypted).toString()
   }
 
   async placeOrder({seller : author, service_permlink}){
@@ -542,7 +530,6 @@ class Client {
 
   async receiveDelivery({seller, order}){
     do {
-      console.log("receiveDelivery", seller, order)
       const deliveries = await this.getEncryptedReplies({
         author : this.username,
         permlink : STEEMPAY_DELIVERIES_PERMLINK,
@@ -550,8 +537,10 @@ class Client {
         commentor : seller,
         title : `DELIVERY-${order}`
       })
-      console.log("deliveries, deliveries", deliveries)
-      if (deliveries.length) return deliveries[0]
+      if (deliveries.length) {
+        console.log("got encrypted deleveries", deliveries[0].body)
+        return deliveries[0]
+      }
     } while(await wait(1000))
   }
 }
@@ -603,7 +592,7 @@ class Bot extends Client{
     do {
       console.log("REDO SESSION", this.started, this.stopping)
       await this.newSession()
-    } while (await this.waitStarted(60 * 60 * 1000))
+    } while (await this.waitStarted(1000))
 
     this.stopping = false
   }
@@ -620,7 +609,7 @@ class Bot extends Client{
   }
 
   async newSession(){
-    console.log("new session, prev:", this.session_permlink)
+    console.log("new session, prev:", this.permlink)
     await this.reply({
       author : this.username,
       permlink : 'steempay-root',
