@@ -6,6 +6,7 @@ const steem = require('steem')
 const fs = require('fs')
 const https = require('https')
 const url = require('url')
+const request = require('request')
 const STEEMPAY_DELIVERIES_PERMLINK = 'steempay-deliveries'
 
 function bufToUint(buf){
