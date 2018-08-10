@@ -136,7 +136,7 @@ class Service {
         console.log("fulfill order from", buyer)
         this.fulfillOrder(buyer)
       }
-    } while(await this.waitStarted(1000))
+    } while(await this.waitStarted(100))
 
     this.stopping = false
   }
@@ -144,7 +144,7 @@ class Service {
   async stop(){
     this.stopping = true
     this.started = false
-    while (await this.waitStopping(1000)){}
+    while (await this.waitStopping(100)){}
   }
 
   async getNewPaidOrders(){
@@ -260,7 +260,7 @@ class Bot extends Client{
     do {
       console.log("REDO SESSION", this.started, this.stopping)
       await this.newSession()
-    } while (await this.waitStarted(1000))
+    } while (await this.waitStarted(60000))
 
     this.stopping = false
   }
@@ -273,7 +273,7 @@ class Bot extends Client{
       await service.stop()
     }
 
-    while (await this.waitStopping(1000)){}
+    while (await this.waitStopping(100)){}
   }
 
   async newSession(){
