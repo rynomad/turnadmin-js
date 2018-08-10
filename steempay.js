@@ -4,7 +4,7 @@ const fs = require('fs')
 const https = require('https')
 const url = require('url')
 const request = require('request')
-const Client = require('./steampay_client.js')
+const Client = require('./steempay_client.js')
 const STEEMPAY_DELIVERIES_PERMLINK = 'steempay-deliveries'
 
 class Service {
