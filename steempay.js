@@ -204,13 +204,15 @@ class Service {
   }
 
   async fulfillOrder(buyer){
+    const body = await this.provider(buyer)
+
     return this.bot.replyEncrypted({
       priority : true,
       author : buyer,
       permlink : STEEMPAY_DELIVERIES_PERMLINK,
       reply : {
         title : `DELIVERY-${this.session_service_permlink}`,
-        body : await this.provider(buyer)
+        body,
       }
     })
   }

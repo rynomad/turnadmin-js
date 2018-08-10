@@ -29,7 +29,7 @@ class STurn {
             })
             await this.turnadmin.addUser({user, password, realm})
             return JSON.stringify({
-              urls : `stun:${realm}:443`,
+              urls : `turn:${realm}:443`,
               username : user,
               credential : password
             })
