@@ -4,6 +4,7 @@ const logs = require('fs-jetpack').cwd('/var/log/')
 const ts = require('tail-stream')
 const {parseLogEvent, consumeLogEvent} = require('./events.js')
 
+const wait = (ms) => new Promise((resolve, reject) => setTimeout(() => resolve(true), ms))
 
 function debracket(string){
   return string.match(/<\S*>/g).map(str => str.substr(1, str.length - 2))
@@ -11,7 +12,7 @@ function debracket(string){
 
 function getMatch(string, regex){
   let match = string.match(regex)
-  if (!match) return null
+  if (!match) return nulls
   match = match[0]
   return match
 }
