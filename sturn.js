@@ -23,7 +23,7 @@ class STurn {
       services : [
         {
           provider : async (user) => {
-            const password = passgen.generate({
+            const credential = passgen.generate({
               length : 32,
               numbers : true,
             })
