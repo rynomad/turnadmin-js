@@ -23,7 +23,7 @@ class STurn {
       services : [
         {
           provider : async (user) => {
-            const credential = passgen.generate({
+            const password = passgen.generate({
               length : 32,
               numbers : true,
             })
@@ -31,7 +31,7 @@ class STurn {
             return JSON.stringify({
               urls : `stun:${realm}:443`,
               username : user,
-              credential 
+              credential : password
             })
           },
           config : {
