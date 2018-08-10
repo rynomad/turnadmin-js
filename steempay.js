@@ -5,6 +5,7 @@ const sc2_sdk = require('sc2-sdk')
 const steem = require('steem')
 const fs = require('fs')
 const https = require('https')
+const url = require('url')
 const STEEMPAY_DELIVERIES_PERMLINK = 'steempay-deliveries'
 
 function bufToUint(buf){
