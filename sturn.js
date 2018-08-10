@@ -1,6 +1,7 @@
 const {Bot} = require('./steempay.js')
 const TurnAdmin = require('./turnadmin.js')
 const jetpack = require('fs-jetpack')
+const passgen = require('generate-password')
 
 class STurn {
   constructor(username, realm, sc2_config){
@@ -22,7 +23,10 @@ class STurn {
       services : [
         {
           async provider(user) {
-            const password = crypto.randomBytes(32).toString('base64')
+            const password = passgen.generate({
+              length : 32,
+              numbers : true,
+            })
             await this.turnadmin.addUser({user, password, realm})
             return JSON.stringify({
               urls : `stun:${realm}:443`,
