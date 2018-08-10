@@ -8,7 +8,7 @@ class STurn {
 
     this.turnadmin = new TurnAdmin()
 
-    this.turnadmin.on('client', ({type, data}) => {
+    this.turnadmin.on('client', async ({type, data}) => {
       console.log("client event", type, data)
       if (type === 'connect'){
         console.log("got connection, deleting user")
