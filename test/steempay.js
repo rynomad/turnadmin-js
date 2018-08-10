@@ -93,6 +93,7 @@ describe('Steempay', function(){
     assert(delivery.body === this.client.username)
   })
 
+
   after(async () => {
     console.log('stopping')
     await this.bot.stop()

@@ -1,8 +1,9 @@
 const crypto = require('crypto')
-
+const {EventEmitter} = require('events')
 const nacl = require('tweetnacl')
 const sc2_sdk = require('sc2-sdk')
 const steem = require('steem')
+const fs = require('fs')
 const STEEMPAY_DELIVERIES_PERMLINK = 'steempay-deliveries'
 
 function bufToUint(buf){
@@ -212,7 +213,7 @@ class Service {
   }
 }
 
-class Client {
+class Client extends EventEmitter {
 
   constructor({
     sc2,
@@ -556,6 +557,20 @@ class Bot extends Client{
   }
 
   async init(){
+    if (!(this._json.sc2.app && this._json.sc2.secret)){
+      throw new Error("Bot requires sc2 config to have app and secret defined")
+    }
+
+    if (!this._json.sc2.code){
+      await this.listenForCode()
+    }
+
+    if (!this._json.sc2.refresh_token){
+      await this.requestToken()
+    }
+
+    await this.refreshToken()
+
     await super.init()
 
     for (let service of this.services){
@@ -563,7 +578,6 @@ class Bot extends Client{
     }
 
     await this.newSession()
-
   }
 
   async waitStarted(ms){
@@ -660,7 +674,8 @@ class Bot extends Client{
   }
 
   async consumeToken({access_token, refresh_token, expires_in, username}){
-    if (access_token && (username === this._json.username) && expires_in && refresh_token){
+    if (access_token && (!this._json.username || (username === this._json.username)) && expires_in && refresh_token){
+      this.username = username
       this._json.sc2.access_token = access_token
       this._json.sc2.expires_at = Date.now() + (expires_in * 1000)
       this._json.sc2.refresh_token = refresh_token
@@ -679,6 +694,7 @@ class Bot extends Client{
         (err, res, body) => {
           if (err) return reject(err)
           if (!this.consumeToken(JSON.parse(body))) return reject(body)
+          this.emit('update')
           resolve()
         }
       )
@@ -693,6 +709,7 @@ class Bot extends Client{
         (err,res, body) => {
           if (err) return reject(err)
           if (!this.consumeToken(JSON.parse(body))) return reject(body)
+          this.emit('update')
           resolve()
         }
       )
