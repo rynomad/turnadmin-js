@@ -1,5 +1,5 @@
 const {Bot} = require('./steempay.js')
-const TurnAdmin = require('')
+const TurnAdmin = require('./turnadmin.js')
 const jetpack = require('fs-jetpack')
 
 class STurn {
