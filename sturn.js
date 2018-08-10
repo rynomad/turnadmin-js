@@ -67,10 +67,12 @@ if (require.main === module){
 
     await server.init()
 
+    server.start().catch(err => {
+      console.error('server error')
+    }).then(() => {
+      console.log('server stopped')
+    })
   }
 
-
-
-
-
+  run()
 }
