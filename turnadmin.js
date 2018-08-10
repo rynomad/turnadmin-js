@@ -35,9 +35,11 @@ class TurnAdmin extends EventEmitter{
     this.connections = new Map()
 
     this.boots = new Map()
+    this.fifo = []
   }
 
   init(){
+
     if (!(this.pid = TurnAdmin.getPID())){
       throw new Error('Turn server not found')
     }
@@ -92,15 +94,45 @@ class TurnAdmin extends EventEmitter{
     })
   }
 
-  async exec(argstr){
+  async __exec(execstr){
     return new Promise((resolve, reject) => {
-      exec(`turnadmin ${argstr}`, (err, stdout, stderr) => {
+      exec(execstr, (err, stdout, stderr) => {
         if (err){
           reject(err)
         } else {
           resolve({stdout, stderr})
         }
       })
+    })
+  }
+
+  async _exec(execstr){
+    if (this._execing) return
+    this._execing = true
+    while (this.fifo.length){
+      const job = this.fifo.shift()
+      try {
+        job.promise.resolve(await this.__exec(job.execstr))
+      } catch (e){
+        job.promise.reject(e)
+      }
+      await wait(1000)
+    } 
+    this._execing = false
+  }
+
+  async exec(argstr){
+    const execstr = `turnadmin ${argstr}`
+    return new Promise((resolve, reject) => {
+      console.log("exec into fifo", execstr)
+      this.fifo.push({
+        promise : {
+          resolve,
+          reject
+        },
+        execstr 
+      })
+      this._exec()
     })
   }
 
