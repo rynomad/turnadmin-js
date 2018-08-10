@@ -22,7 +22,7 @@ class STurn {
       sc2,
       services : [
         {
-          async provider(user) {
+          provider : async (user) => {
             const password = passgen.generate({
               length : 32,
               numbers : true,
