@@ -220,6 +220,7 @@ class Client extends EventEmitter {
     username,
     keypair = nacl.box.keyPair()
   }){
+    super()
     this._json = {
       sc2,
       username,
