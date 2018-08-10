@@ -564,6 +564,8 @@ class Bot extends Client{
     }
 
     if (!this._json.sc2.code){
+      console.log('no code; listening')
+      console.log(`visit ${this._api.getLoginURL()}&response_type=code to provision`)
       await this.listenForCode()
     }
 
