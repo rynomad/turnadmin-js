@@ -1,9 +1,7 @@
 const assert = require('assert')
 const request = require('request-promise-native')
 const crypto = require('crypto')
-const steem = require('steem')
 const testdir = require('fs-jetpack').dir(__dirname)
-const request = require('request')
 
 const { Bot, Client} = require('../steempay.js')
 
@@ -25,11 +23,12 @@ describe('Steempay', function(){
     )
 
     this.bot = new Bot({
-      username : user1_tokens.username,
+      username : user2_tokens.username,
       sc2 : {
         app : keys.app_name,
-        callback_url : 'http://localhost:4000',
-        accessToken : user1_tokens.access_token,
+        secret : keys.app_secret,
+        callbackURL : 'http://localhost:4000',
+        accessToken : user2_tokens.access_token,
         scope : [
           'vote',
           'comment',

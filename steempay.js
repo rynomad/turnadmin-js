@@ -69,18 +69,18 @@ class Service {
 
   async postServiceDefinition(){
     console.log("postServiceDefinition", this.service_definition)
-    try {
+    const service_definition = await this.bot.getPost({
+      author : this.bot.username,
+      permlink : this.permlink
+    })
+    if (!service_definition){
       this.permlink = await this.bot.reply({
         author : this.bot.username,
         permlink : 'steempay-services',
         reply : this.service_definition
       })
-    } catch (e){
-      console.error(e)
-      throw e
-    }
+    } 
 
-    console.log("service_permlink", this.permlink)
   }
 
   async prepareSession(session_permlink){
@@ -148,6 +148,7 @@ class Service {
   }
 
   async getNewPaidOrders(){
+    if (!this.session_service_permlink) return []
     const votes = await this.getActiveVotes({
       author : this.bot.username,
       permlink : this.session_service_permlink
@@ -176,6 +177,7 @@ class Service {
     return new Promise((resolve, reject) => {
       steem.api.getActiveVotes(author, permlink, (err, res) => {
         if (err){
+          console.log('active votes failed', author, permlink)
           return reject(err)
         }
         resolve(res.filter(({voter: _voter}) => !voter || (voter === _voter)))
@@ -208,22 +210,24 @@ class Bot extends Client{
     this.services = options.services.map((service) => new Service(this, service.provider, service.config))
   }
 
-  async init(){
+  async init(skiplisten){
     if (!(this._json.sc2.app && this._json.sc2.secret)){
       throw new Error("Bot requires sc2 config to have app and secret defined")
-    }
+    } 
 
-    if (!this._json.sc2.code){
-      console.log('no code; listening')
-      console.log(`visit ${this._api.getLoginURL()}&response_type=code to provision`)
-      await this.listenForCode()
+    if (skiplisten){
+      if (!this._json.sc2.code){
+        console.log('no code; listening')
+        console.log(`visit ${this._api.getLoginURL()}&response_type=code to provision`)
+        await this.listenForCode()
+      }
+  
+      if (!this._json.sc2.refresh_token){
+        await this.requestToken()
+      }
+  
+      await this.refreshToken()
     }
-
-    if (!this._json.sc2.refresh_token){
-      await this.requestToken()
-    }
-
-    await this.refreshToken()
 
     await super.init()
 
