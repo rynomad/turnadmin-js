@@ -3,7 +3,7 @@ const request = require('request-promise-native')
 const crypto = require('crypto')
 const steem = require('steem')
 const testdir = require('fs-jetpack').dir(__dirname)
-
+const request = require('request')
 
 const { Bot, Client} = require('../steempay.js')
 
