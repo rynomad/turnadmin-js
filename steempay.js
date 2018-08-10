@@ -721,8 +721,8 @@ class Bot extends Client{
   async listenForCode(){
     return new Promise((resolve, reject) => {
       this.server = https.createServer({
-        cert : fs.readFileSync(this._json.certfile),
-        key : fs.readFileSync(this._json.keyfile)
+        cert : fs.readFileSync(this._json.sc2.certfile),
+        key : fs.readFileSync(this._json.sc2.keyfile)
       },(request, response) => {
         const {query : {code}} = url.parse(request.url, true)
         console.log('got query', code)
