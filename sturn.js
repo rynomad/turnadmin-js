@@ -39,7 +39,7 @@ class STurn {
 
     this.bot.on('update', () => {
       console.log('got update')
-      jetpack.write(sc2_config, this.bot._json)
+      jetpack.write(sc2_config, this.bot._json.sc2)
     })
   }
 

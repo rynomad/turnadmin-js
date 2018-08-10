@@ -731,7 +731,7 @@ class Bot extends Client{
         const {query : {code}} = url.parse(request.url, true)
         console.log('got query', code)
         if (code) {
-          this._json.code = code
+          this._json.sc2.code = code
           this.emit('update')
           response.statusCode = 200
           response.end(() => {
