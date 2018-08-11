@@ -4,6 +4,12 @@ class STurnClient extends Client{
   constuctor(options){
     super(options)
   }
+
+  consumeTokenFromURL(){
+
+  }
+
+  
 }
 
 
