@@ -5,3 +5,10 @@ class STurnClient extends Client{
     super(options)
   }
 }
+
+
+if (require.main === module){
+  async function run(){
+
+  }
+}

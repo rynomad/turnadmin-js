@@ -56,6 +56,10 @@ class Client extends EventEmitter {
     return this._api
   }
 
+  get loginURL(){
+    return this._api.getLoginURL()
+  }
+
   setAccessToken(access_token) {
     this._api.setAccessToken(access_token)
   }
