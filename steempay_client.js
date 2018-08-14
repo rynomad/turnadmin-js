@@ -205,7 +205,7 @@ class Service {
   async fulfillOrder(buyer) {
     const body = await this.provider(buyer, this)
     if (!body) return
-    
+
     return this.bot.replyEncrypted({
       priority: true,
       author: buyer,
@@ -520,7 +520,7 @@ class Client extends EventEmitter {
   async post({ permlink = crypto.randomBytes(16).toString('hex'), title, body, meta }) {
     console.log(permlink, title, body, meta)
     try {
-      await this.comment('', this.username, this.username, permlink, title, body, meta || null)
+      await this.comment('', 'steempay', this.username, permlink, title, body, meta || null)
     } catch (e) {
       if (e.name === 'FetchError') return this.post({ permlink, title, body, meta })
       if (e.error_description.indexOf('STEEM_MIN_ROOT_COMMENT_INTERVAL') >= 0) {

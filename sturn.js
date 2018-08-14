@@ -2,6 +2,7 @@ const {Bot} = require('./steempay.js')
 const TurnAdmin = require('./turnadmin.js')
 const jetpack = require('fs-jetpack')
 const passgen = require('generate-password')
+const Signaler = require('./signaler.js')
 
 class STurn {
   constructor(username, realm, sc2_config){
@@ -27,6 +28,7 @@ class STurn {
               length : 32,
               numbers : true,
             })
+            await this.signaler.addUser(user, password)
             await this.turnadmin.addUser({user, password, realm})
             return JSON.stringify({
               urls : `turn:${realm}:443`,
@@ -44,6 +46,11 @@ class STurn {
     this.bot.on('update', () => {
       console.log('got update')
       jetpack.write(sc2_config, this.bot._json.sc2)
+    })
+
+    this.signaler = new Signaler({
+      port : 444,
+      ...sc2
     })
   }
 
