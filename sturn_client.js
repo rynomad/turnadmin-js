@@ -74,9 +74,10 @@ class BrowserBot extends Client {
 }
 
 class Call {
-  constructor({ iceServer, localVideo, remoteVideo }) {
-    (this.iceServer = iceServer),
-      (this.localVideo = document.getElementById(localVideo));
+  constructor({ iceServer, localVideo, remoteVideo, to }) {
+    this.to = to
+    this.iceServer = iceServer
+    this.localVideo = document.getElementById(localVideo);
     this.remoteVideo = document.getElementById(remoteVideo);
   }
 
@@ -109,10 +110,14 @@ class Call {
         const offer = await this.peerConnection.createOffer();
   
         await this.peerConnection.setLocalDescription(offer);
-        this.serverConnection.send(
-          JSON.stringify({
+        const signal = {
+          to : this.to,
+          data : {
             sdp: this.peerConnection.localDescription
-          })
+          }
+        }
+        this.serverConnection.send(
+          JSON.stringify(signal)
         );
       }
     }
@@ -141,9 +146,14 @@ class Call {
         const description = await peerConnection.createAnswer();
 
         await this.peerConnection.setLocalDescription(description);
-
+        const signal = {
+          to : this.to,
+          data : {
+            sdp: this.peerConnection.localDescription
+          }
+        }
         this.serverConnection.send(
-          JSON.stringify({ sdp: this.peerConnection.localDescription })
+          JSON.stringify(signal)
         );
       }
     } else if (signal.ice) {
@@ -154,7 +164,11 @@ class Call {
 
   gotIceCandidate(event) {
     if (event.candidate != null) {
-      this.serverConnection.send(JSON.stringify({ ice: event.candidate }));
+      const signal = {
+        to : this.to,
+        data : { ice: event.candidate }
+      }
+      this.serverConnection.send(JSON.stringify(signal));
     }
   }
 
@@ -185,7 +199,8 @@ class SturnClient {
               this.call = new Call({
                 iceServer: credential,
                 localVideo,
-                remoteVideo
+                remoteVideo,
+                to : user
               });
               this.call.start();
               return JSON.stringify(service);
@@ -231,7 +246,8 @@ class SturnClient {
     this.call = new Call({
       iceServer,
       localVideo: this.localVideo,
-      remoteVideo: this.remoteVideo
+      remoteVideo: this.remoteVideo,
+      to : username
     });
 
     this.call.start(true);

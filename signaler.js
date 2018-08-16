@@ -70,8 +70,10 @@ class Signaler{
     do {
       const pending = []
       let next
+      console.log("iterating fifo", this.fifo)
 
       while (next = this.fifo.shift()) {
+        console.log("send", next)
         if (this.connections.has(next.to)) {
           const ws = this.connections.get(next.to)
           ws.send(JSON.stringify(next.data))
@@ -80,7 +82,9 @@ class Signaler{
         }
       }
 
-      this.fifo = pending
+      for (const pend of pending){
+        this.fifo.push(pend)
+      }
     } while (await this.waitStarted(500))
 
     this.stopping = false
