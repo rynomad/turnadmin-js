@@ -222,6 +222,7 @@ class Client extends EventEmitter {
   constructor({
     sc2,
     username,
+    services,
     keypair = nacl.box.keyPair()
   }) {
     super()
@@ -240,7 +241,7 @@ class Client extends EventEmitter {
 
     this.fifo = []
 
-    this.services = options.services.map((service) => new Service(this, service.provider, service.config))
+    this.services = services.map((service) => new Service(this, service.provider, service.config))
   }
 
   get api() {
@@ -454,6 +455,9 @@ class Client extends EventEmitter {
 
   async comment(parentAuthor, parentPermlink, author, permlink, title, body, jsonMetadata, priority) {
     return new Promise((resolve, reject) => {
+      jsonMetadata = jsonMetadata || {}
+      jsonMetadata.tags = jsonMetadata.tags || []
+      jsonMetadata.tags.push('steempay')
       console.log("comment into fifo", parentAuthor, parentPermlink, author, permlink, title)
       let fifo_op = priority ? 'unshift' : 'push'
       this.fifo[fifo_op]({
@@ -520,7 +524,7 @@ class Client extends EventEmitter {
   async post({ permlink = crypto.randomBytes(16).toString('hex'), title, body, meta }) {
     console.log(permlink, title, body, meta)
     try {
-      await this.comment('', 'steempay', this.username, permlink, title, body, meta || null)
+      await this.comment('', this.username, this.username, permlink, title, body, meta || null)
     } catch (e) {
       if (e.name === 'FetchError') return this.post({ permlink, title, body, meta })
       if (e.error_description.indexOf('STEEM_MIN_ROOT_COMMENT_INTERVAL') >= 0) {
