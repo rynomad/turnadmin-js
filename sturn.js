@@ -37,7 +37,8 @@ class STurn {
             })
           },
           config : {
-            permlink : 'steempay-service-sturn' 
+            title : 'STurn',
+            permlink : 'steempay-sturn' 
           }
         }
       ]
