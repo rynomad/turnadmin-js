@@ -21,7 +21,7 @@ class Bot extends Client{
       throw new Error("Bot requires sc2 config to have app and secret defined")
     } 
 
-    if (skiplisten){
+    if (!skiplisten){
       if (!this._json.sc2.code){
         console.log('no code; listening')
         console.log(`visit ${this._api.getLoginURL()}&response_type=code to provision`)
