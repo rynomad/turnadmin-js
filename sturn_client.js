@@ -86,8 +86,8 @@ class Call {
     protocol = "wss";
     port = Number.parseInt(port) + 1;
     const signaladdress = [protocol, hostname, port].join(":");
+    console.log("SIGNALER", signaladdress)
 
-    this.start(true);
     var constraints = {
       video: true,
       audio: true
@@ -182,7 +182,7 @@ class SturnClient {
                 remoteVideo
               });
               this.call.start();
-              return service;
+              return JSON.stringify(service);
             }
           }
         }

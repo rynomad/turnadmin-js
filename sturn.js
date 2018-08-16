@@ -58,6 +58,7 @@ class STurn {
   async init(){
     await this.turnadmin.init()
     await this.bot.init()
+    this.signaler.init()
   }
 
   async start(){

@@ -586,7 +586,10 @@ class Client extends EventEmitter {
       })
       services = services.concat(user_services)
     }
-    return services
+    return services.map(({author : seller, permlink : service_permlink}) => ({
+      seller,
+      service_permlink
+    }))
   }
 
   async getReplies({ author = this.username, permlink, commentor, title }) {
@@ -714,7 +717,7 @@ class Client extends EventEmitter {
     })
 
     const delivery = await this.receiveDelivery({ seller, order })
-    const json = JSON.parse(delivery)
+    const json = JSON.parse(delivery.body)
     return json
   }
 }
