@@ -1,13 +1,14 @@
 const { Client } = require("./steempay_client.js");
 const steemconnect = require("sc2-sdk");
 const { EventEmitter } = require("events");
-const steem = require('steem')
+const steem = require("steem");
 class BrowserBot extends Client {
   getTokenFromLocalStorage() {
-    window.steem = steem
+    window.steem = steem;
+    return null;
     const access_token = localStorage.getItem("access_token");
     const username = localStorage.getItem("username");
-    const expires_at = localStorage.getItem("expires_at") || (Date.now() - 60000);
+    const expires_at = localStorage.getItem("expires_at") || Date.now() - 60000;
 
     if (expires_at < Date.now()) {
       return null;
@@ -24,7 +25,7 @@ class BrowserBot extends Client {
     const searchparams = new URLSearchParams(document.location.search);
     const access_token = searchparams.get("access_token");
     const username = searchparams.get("username");
-    const expires_in = Number.parseInt(searchparams.get("expires_in") || '0')
+    const expires_in = Number.parseInt(searchparams.get("expires_in") || "0");
     const expires_at = expires_in * 1000 + Date.now() - 60000;
 
     if (expires_at < Date.now()) {
@@ -56,7 +57,7 @@ class BrowserBot extends Client {
 
   initSteemConnect() {
     const creds = this.getTokenFromLocalStorage() || this.getTokenFromURL();
-    console.log("CREDS?", creds)
+    console.log("CREDS?", creds);
     if (creds) {
       const { access_token, username } = creds;
       this.username = username;
@@ -108,7 +109,7 @@ class Call {
     this.peerConnection.addStream(this.localStream);
 
     if (isCaller) {
-      this.recorder = new CallRecorder(this.peerConnection);
+      this.recorder = new CallRecorder(this.peerConnection, this.localStream);
 
       const offer = await this.peerConnection.createOffer();
 
@@ -166,8 +167,8 @@ class SturnClient {
       services: [
         {
           config: {
-            name: "Sturn Call",
-            permlink: "steempay-service-call"
+            title: "Call",
+            permlink: "steempay-call"
           },
           provider: async (user, service) => {
             const accept = await ringer(user);
@@ -193,7 +194,9 @@ class SturnClient {
 
   async init() {
     await this.bot.init();
-    this.sturnServices = await this.bot.findServices("sturn");
+    this.callServices = await this.bot.findServices("Call");
+    this.sturnServices = await this.bot.findServices("STurn");
+    console.log("SERVICES", this);
   }
 
   async getCredential() {
@@ -210,11 +213,11 @@ class SturnClient {
 
   async call(username) {
     const callservice = {
-      username,
-      service_permlink: "steempay-service-call"
+      seller: username,
+      service_permlink: "steempay-call"
     };
-    const sturn_service = await this.purchase(callservice);
-    const iceServer = await this.purchase(sturn_service);
+    const sturn_service = await this.bot.purchase(callservice);
+    const iceServer = await this.bot.purchase(sturn_service);
 
     this.call = new Call({
       iceServer,
@@ -227,7 +230,8 @@ class SturnClient {
 }
 
 class CallRecorder extends EventEmitter {
-  constructor(peerConnection) {
+  constructor(peerConnection, localStream) {
+    this.localStream = localStream;
     this.pc = peerConnection;
     this.createDataChannels();
   }
@@ -240,7 +244,7 @@ class CallRecorder extends EventEmitter {
 
   startRecording(event, arg) {
     console.log("START RECORDIGN");
-    this.localRecorder = new MediaRecorder(appController.localStream_, {
+    this.localRecorder = new MediaRecorder(this.localStream, {
       mimeType: "video/webm;codecs=vp9"
     });
     this.localRecorder.ondataavailable = event => {

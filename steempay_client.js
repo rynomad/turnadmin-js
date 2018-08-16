@@ -457,7 +457,7 @@ class Client extends EventEmitter {
     return new Promise((resolve, reject) => {
       jsonMetadata = jsonMetadata || {}
       jsonMetadata.tags = jsonMetadata.tags || []
-      jsonMetadata.tags.push('steempay')
+      jsonMetadata.tags.push('steem-vote-pay')
       console.log("comment into fifo", parentAuthor, parentPermlink, author, permlink, title)
       let fifo_op = priority ? 'unshift' : 'push'
       this.fifo[fifo_op]({
@@ -565,7 +565,29 @@ class Client extends EventEmitter {
     return pubkey
   }
 
+  async findSteemPayUsers(){
+    return new Promise((resolve,reject) => {
+      steem.api.getDiscussionsByActive ({tag : 'steem-vote-pay', limit : 100},(err,res) => {
+        if (err) return reject(err)
+        resolve(res.map(({author}) => author))
+      })
+    })
+  }
 
+  async findServices(name){
+    const users = await this.findSteemPayUsers()
+    let services = []
+    for(const user of users){
+      const user_services = await this.getReplies({
+        author : user,
+        permlink : 'steempay-services',
+        commentor : user,
+        title : name
+      })
+      services = services.concat(user_services)
+    }
+    return services
+  }
 
   async getReplies({ author = this.username, permlink, commentor, title }) {
     return new Promise((resolve, reject) =>
@@ -691,7 +713,7 @@ class Client extends EventEmitter {
       service_permlink
     })
 
-    const delivery = await client.receiveDelivery({ seller: 'rynomad', order })
+    const delivery = await this.receiveDelivery({ seller, order })
     const json = JSON.parse(delivery)
     return json
   }
