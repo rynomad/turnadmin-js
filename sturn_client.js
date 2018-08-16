@@ -135,30 +135,30 @@ class Call {
   }
 
   async gotMessageFromServer(message) {
-    var signal = JSON.parse(message.data);
-
+    const signal = JSON.parse(message.data);
+    console.log("got signal", signal)
     if (signal.sdp) {
       await this.peerConnection.setRemoteDescription(
         new RTCSessionDescription(signal.sdp)
       );
       // Only create answers in response to offers
       if (signal.sdp.type == "offer") {
-        const description = await peerConnection.createAnswer();
+        const description = await this.peerConnection.createAnswer();
 
         await this.peerConnection.setLocalDescription(description);
-        const signal = {
+        const _signal = {
           to : this.to,
           data : {
             sdp: this.peerConnection.localDescription
           }
         }
         this.serverConnection.send(
-          JSON.stringify(signal)
+          JSON.stringify(_signal)
         );
       }
     } else if (signal.ice) {
       const candidate = new RTCIceCandidate(signal.ice);
-      this.peerConnection.addIceCandidate(candidate).catch(errorHandler);
+      await this.peerConnection.addIceCandidate(candidate);
     }
   }
 
@@ -270,9 +270,7 @@ class CallRecorder extends EventEmitter {
 
   startRecording(event, arg) {
     console.log("START RECORDIGN");
-    this.localRecorder = new MediaRecorder(this.localStream, {
-      mimeType: "video/webm;codecs=vp9"
-    });
+    this.localRecorder = new MediaRecorder(this.localStream);
     this.localRecorder.ondataavailable = event => {
       console.log("got video data", event);
       const data = event.data;
@@ -316,7 +314,7 @@ class CallRecorder extends EventEmitter {
       id: 0
     });
     this.dcs.video.onopen = () => {
-      console.log("VIDEO DC CONNECTED", appController.localStream);
+      console.log("VIDEO DC CONNECTED");
       //this.startRecording()
     };
 
@@ -344,9 +342,7 @@ class CallRecorder extends EventEmitter {
     this.dcs.signal.onmessage = event => {
       let recorderState;
       console.log("remote got signal");
-      this.localRecorder = new MediaRecorder(appController.localStream_, {
-        mimeType: "video/webm;codecs=vp9"
-      });
+      this.localRecorder = new MediaRecorder(this.localStream);
       this.localRecorder.ondataavailable = ({
         data,
         currentTarget: { state }
