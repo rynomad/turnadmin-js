@@ -82,7 +82,7 @@ class Call {
 
   async start(isCaller) {
     let [protocol, hostname, port] = this.iceServer.urls.split(":");
-    hostname = "//" + hostname;
+    hostname = "//sub." + hostname;
     protocol = "wss";
     port = Number.parseInt(port) + 1;
     const signaladdress = [protocol, hostname, port].join(":");
@@ -101,6 +101,22 @@ class Call {
     this.serverConnection = new WebSocket(signaladdress);
     this.serverConnection.onmessage = msg => this.gotMessageFromServer(msg);
 
+    this.serverConnection.onopen = async () => {
+      console.log("SERVER CONNECTION OPEN")
+      this.serverConnection.send(JSON.stringify(this.iceServer))
+      if (isCaller) {
+  
+        const offer = await this.peerConnection.createOffer();
+  
+        await this.peerConnection.setLocalDescription(offer);
+        this.serverConnection.send(
+          JSON.stringify({
+            sdp: this.peerConnection.localDescription
+          })
+        );
+      }
+    }
+
     this.peerConnection = new RTCPeerConnection({
       iceServers: [this.iceServer]
     });
@@ -108,19 +124,9 @@ class Call {
     this.peerConnection.ontrack = evt => this.gotRemoteStream(evt);
     this.peerConnection.addStream(this.localStream);
 
-    if (isCaller) {
-      this.recorder = new CallRecorder(this.peerConnection, this.localStream);
+    this.recorder = new CallRecorder(this.peerConnection, this.localStream);
 
-      const offer = await this.peerConnection.createOffer();
 
-      await this.peerConnection.setLocalDescription(offer);
-      this.serverConnection.send(
-        JSON.stringify({
-          sdp: this.peerConnection.localDescription,
-          uuid: uuid
-        })
-      );
-    }
   }
 
   async gotMessageFromServer(message) {
@@ -195,7 +201,10 @@ class SturnClient {
   async init() {
     await this.bot.init();
     this.callServices = await this.bot.findServices("Call");
-    this.sturnServices = await this.bot.findServices("STurn");
+    do {
+      this.sturnServices = await this.bot.findServices("STurn");
+
+    } while (this.sturnServices.length === 0)
     console.log("SERVICES", this);
   }
 
@@ -231,6 +240,7 @@ class SturnClient {
 
 class CallRecorder extends EventEmitter {
   constructor(peerConnection, localStream) {
+    super()
     this.localStream = localStream;
     this.pc = peerConnection;
     this.createDataChannels();

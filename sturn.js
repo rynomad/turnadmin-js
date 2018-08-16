@@ -62,6 +62,7 @@ class STurn {
   }
 
   async start(){
+    this.signaler.start()
     return this.bot.start()
   }
 
