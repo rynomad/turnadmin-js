@@ -2,9 +2,11 @@ const { Client } = require("./steempay_client.js");
 const steemconnect = require("sc2-sdk");
 const { EventEmitter } = require("events");
 const steem = require("steem");
+window.steem = steem
+
+const wait = async (ms) => new Promise((res) => setTimeout(res,ms)) 
 class BrowserBot extends Client {
   getTokenFromLocalStorage() {
-    window.steem = steem;
     return null;
     const access_token = localStorage.getItem("access_token");
     const username = localStorage.getItem("username");
@@ -73,8 +75,9 @@ class BrowserBot extends Client {
   }
 }
 
-class Call {
+class Call extends EventEmitter {
   constructor({ iceServer, localVideo, remoteVideo, to }) {
+    super()
     this.to = to
     this.iceServer = iceServer
     this.localVideo = document.getElementById(localVideo);
@@ -127,9 +130,10 @@ class Call {
     });
     this.peerConnection.onicecandidate = evt => this.gotIceCandidate(evt);
     this.peerConnection.ontrack = evt => this.gotRemoteStream(evt);
-    this.peerConnection.addStream(this.localStream);
 
-    this.recorder = new CallRecorder(this.peerConnection, this.localStream);
+    this.localStream.getTracks().forEach(track => this.peerConnection.addTrack(track, this.localStream));
+
+    this.recorder = new CallRecorder(this, this.peerConnection, this.localStream);
 
 
   }
@@ -173,7 +177,7 @@ class Call {
   }
 
   gotRemoteStream(event) {
-    console.log("got remote stream");
+    console.log("got remote stream",event);
     this.remoteVideo.srcObject = event.streams[0];
   }
 }
@@ -251,12 +255,14 @@ class SturnClient {
     });
 
     this.call.start(true);
+    return this.call
   }
 }
 
 class CallRecorder extends EventEmitter {
-  constructor(peerConnection, localStream) {
+  constructor(call, peerConnection, localStream) {
     super()
+    this.call = call
     this.localStream = localStream;
     this.pc = peerConnection;
     this.createDataChannels();
@@ -270,7 +276,7 @@ class CallRecorder extends EventEmitter {
 
   startRecording(event, arg) {
     console.log("START RECORDIGN");
-    this.localRecorder = new MediaRecorder(this.localStream);
+    this.localRecorder = new MediaRecorder(this.localStream, {mimeType: 'video/webm;codecs=vp9'});
     this.localRecorder.ondataavailable = event => {
       console.log("got video data", event);
       const data = event.data;
@@ -283,12 +289,7 @@ class CallRecorder extends EventEmitter {
 
     this.dcs.video.onmessage = async ({ data }) => {
       console.log("got remote video data", data);
-      const blob = new Blob([data]);
-      const reader = new FileReader();
-      reader.onload = () => {
-        this.emit("remote_chunk", { data: reader.result });
-      };
-      reader.readAsArrayBuffer(blob);
+      this.emit("remote_chunk", { data });
     };
 
     this.dcs.video.onclose = async () => {
@@ -328,6 +329,7 @@ class CallRecorder extends EventEmitter {
     });
     this.dcs.signal.onopen = () => {
       console.log("SIGNAL CHANNEL OPEN", this.dcs.signal);
+      this.call.emit('start')
     };
 
     this.dcs.signal.onclose = () => {
@@ -342,7 +344,7 @@ class CallRecorder extends EventEmitter {
     this.dcs.signal.onmessage = event => {
       let recorderState;
       console.log("remote got signal");
-      this.localRecorder = new MediaRecorder(this.localStream);
+      this.localRecorder = new MediaRecorder(this.localStream, {mimeType: 'video/webm;codecs=vp9'});
       this.localRecorder.ondataavailable = ({
         data,
         currentTarget: { state }

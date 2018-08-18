@@ -153,7 +153,7 @@ class Service {
         console.log("fulfill order from", buyer)
         this.fulfillOrder(buyer)
       }
-    } while (await this.waitStarted(100))
+    } while (await this.waitStarted(1000))
 
     this.stopping = false
   }
@@ -161,7 +161,7 @@ class Service {
   async stop() {
     this.stopping = true
     this.started = false
-    while (await this.waitStopping(100)) { }
+    while (await this.waitStopping(1000)) { }
   }
 
   async getNewPaidOrders() {
@@ -358,7 +358,7 @@ class Client extends EventEmitter {
       await service.stop()
     }
 
-    while (await this.waitStopping(100)) { }
+    while (await this.waitStopping(1000)) { }
   }
 
   async newSession() {
